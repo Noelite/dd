@@ -11,8 +11,10 @@
 
 void Exit(DWORD dwExitReason, DWORD dwExitCode);
 DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize);
+void StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 
-bool bIfSet = false, bOfSet = false, bSizeSet = false, bBsSet = false, bDataSet = false, bIsPhysicalDrive = false;
+bool bIfSet = false, bOfSet = false, bSizeSet = false, bBsSet = false, bDataSet = false, bIfIsPhysicalDrive = false, bOfIsPhysicalDrive = false, bDeleteFile = false,
+bDestHandleOpen, bSrcHandleOpen;
 HANDLE hSrcFile = 0, hDestFile = 0;
 
 int main(int argc, char* argv[]) {
@@ -36,7 +38,7 @@ int main(int argc, char* argv[]) {
 	byte data = 0;
 	char szInputFile[FILENAME_MAX];
 	char szOutputFile[FILENAME_MAX];
-	DWORD dwBufferSize = 65536;
+	QWORD qwBufferSize = 65536;
 	QWORD qwWriteSize = 0;
 	
 
@@ -49,6 +51,7 @@ int main(int argc, char* argv[]) {
 		if (memcmp(argv[i], "if=", 3) == 0) {
 			strcpy(szInputFile, argv[i] + 3);
 			hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
+			bSrcHandleOpen = true;
 			bIfSet = true;
 			continue;
 
@@ -61,6 +64,7 @@ int main(int argc, char* argv[]) {
 				CloseHandle(hDestFile);
 				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, CREATE_ALWAYS, NULL, NULL);
 			}
+			bDestHandleOpen = true;
 			bOfSet = true;
 			continue;
 
@@ -94,7 +98,7 @@ int main(int argc, char* argv[]) {
 				cnt++;
 			}
 			tmp[cnt] = 0;
-			dwBufferSize = atol(tmp);
+			StrToQword(tmp, &qwBufferSize);
 			bBsSet = true;
 			continue;
 
@@ -111,8 +115,12 @@ int main(int argc, char* argv[]) {
 				cnt++;
 			}
 			tmp[cnt] = 0;
-			qwWriteSize = atoll(tmp);
+			StrToQword(tmp, &qwWriteSize);
 			bSizeSet = true;
+			continue;
+		}
+		if (memcmp(argv[i], "delete", 7) == 0) {
+			bDeleteFile = true;
 			continue;
 		}
 		printf("i = %d\nargc = %d\nargv[%d] = %s", i, argc, i, argv[i]);
@@ -121,72 +129,96 @@ int main(int argc, char* argv[]) {
 	
 	LARGE_INTEGER li;
 	DWORD ret = 0;
-	/*if (memcmp(szOutputFile + 3, "\\\\.\\", 4) == 0 && szOutputFile[7] == ':') {
-		if (szOutputFile[7] >= 'a' || szOutputFile[7] <= 'z')
-			szOutputFile[7] += 32;
-		if (isLetter(szOutputFile[7], true)) {
-			if (!DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
-				printf("DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
-				Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
-			}
-			bIsPhysicalDrive = true;
-		}
-		else {
-			Exit(EXIT_REASON_INVALID_ARGUMENT, 8);
-		}
-	}*/
 
-	
-	if (!bSizeSet) {
-		GetFileSizeEx(hSrcFile, &li);
-		qwWriteSize = li.QuadPart;
-	}
-	printf("szOf: %s\n", szOutputFile);
 	if (memcmp(szOutputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
-		bIsPhysicalDrive = true;
+		bOfIsPhysicalDrive = true;
+		if (!DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, 0, 0, 0, 0, &ret, 0)) {
+			printf("DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
+			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
+
+		}
 		if (!DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
 			printf("DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
 		}
-		GetDriveSize(hDestFile, &qwWriteSize);
-		printf("GetDriveSize %llu\n", qwWriteSize);
 	}
+	if (memcmp(szInputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
+		bIfIsPhysicalDrive = true;
 
+		if (!DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
+			printf("DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
+			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
+
+		}
+		if (!bSizeSet) {
+			GetDriveSize(hSrcFile, &qwWriteSize);
+			printf("GetDriveSize(hSrcFile) %llu\n", qwWriteSize);
+		}
+
+	}
+	if (!bSizeSet) {
+		GetFileSizeEx(hSrcFile, &li);
+		qwWriteSize = li.QuadPart;
+	}
 	if (!bIfSet && !bDataSet) {
 		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 9);
 	}
 	if (!bIfSet) {
-		if (!bSizeSet && !bIsPhysicalDrive) {
+		if (!bSizeSet && !bOfIsPhysicalDrive) {
 			GetFileSizeEx(hDestFile, &li);
 			qwWriteSize = li.QuadPart;
 
 		}
-		printf("call FillFile(%p, %llu, %lu, %d)\n", hDestFile, qwWriteSize, dwBufferSize, data);
-		ret = FillFile(hDestFile, qwWriteSize, dwBufferSize, data);
+		printf("call FillFile(%p, %llu, %lu, %d)\n", hDestFile, qwWriteSize, qwBufferSize, data);
+		ret = FillFile(hDestFile, qwWriteSize, qwBufferSize, data);
+		bOfSet = false;
 	}
 	else {
-		printf("call CopyLargeFile(%p, %p, %d, %llu)\n", hSrcFile, hDestFile, dwBufferSize, qwWriteSize);
-		ret = CopyLargeFile(hSrcFile, hDestFile, dwBufferSize, qwWriteSize);
+		printf("call CopyLargeFile(%p, %p, %d, %llu)\n", hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
+		ret = CopyLargeFile(hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
 	}
 	if (ret) {
 		printf("Error\nret = %d\n", ret);
 	}
-	if (bIsPhysicalDrive) {
+	if (bOfIsPhysicalDrive) {
 		if (!DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
 			printf("DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_UNLOCK_ERROR, 7);
+			
 		}
+	}
+	else if (bDeleteFile) {
+		if (bDestHandleOpen)
+			CloseHandle(hDestFile);
+		bool a = DeleteFileA(szOutputFile);
+		if (!a)
+			printf("DeleteFileA err %d\n", GetLastError());
 	}
 	Exit(EXIT_REASON_NO_REASON, 0);
 }
+void StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
+	printf("StrToQword(%s, %llu)\n", lpStr, *lpQwDest);
+	char suffix[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
+	QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824 };
+	DWORD dwStrLength = strlen(lpStr);
+	for (byte i = 0; i < sizeof(suffix); i++) {
+		if (lpStr[dwStrLength - 1] == suffix[i]) {
+			char tmp[12];
+			memcpy(tmp, lpStr, dwStrLength - 1);
+			DWORD temp = strtoul(tmp, 0, 10);
+			*lpQwDest = temp * qwSuffixSize[i];
+		}
+	}
+	printf("StrToQword(%s, %llu)\n", lpStr, *lpQwDest);
+}
 
 void Exit(DWORD dwExitReason, DWORD dwExitCode) {
-	if (bIfSet)
+	if (bSrcHandleOpen)
 		CloseHandle(hSrcFile);
 
-	if (bOfSet)
+	if (bDestHandleOpen)
 		CloseHandle(hDestFile);
 
 	switch (dwExitReason) {
