@@ -13,6 +13,7 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode);
 DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize);
 void StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 
+
 bool bIfSet = false, bOfSet = false, bSizeSet = false, bBsSet = false, bDataSet = false, bIfIsPhysicalDrive = false, bOfIsPhysicalDrive = false, bDeleteFile = false,
 bDestHandleOpen, bSrcHandleOpen;
 HANDLE hSrcFile = 0, hDestFile = 0;
@@ -59,10 +60,10 @@ int main(int argc, char* argv[]) {
 
 		if (memcmp(argv[i], "of=", 3) == 0) {
 			strcpy(szOutputFile, argv[i] + 3);
-			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
+			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
 			if (GetLastError() == ERROR_FILE_NOT_FOUND) {
 				CloseHandle(hDestFile);
-				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_WRITE | FILE_SHARE_READ, NULL, CREATE_ALWAYS, NULL, NULL);
+				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_NO_BUFFERING, NULL);
 			}
 			bDestHandleOpen = true;
 			bOfSet = true;
@@ -133,7 +134,11 @@ int main(int argc, char* argv[]) {
 
 	if (memcmp(szOutputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
 		bOfIsPhysicalDrive = true;
-		if (!DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, 0, 0, 0, 0, &ret, 0)) {
+		char tmp[4];
+		strcpy(tmp, szOutputFile + 17);
+		DWORD dwOutputFileDriveNumber = atoi(tmp);
+		LockDriveVolumes(dwOutputFileDriveNumber);
+		/*if (!DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, 0, 0, 0, 0, &ret, 0)) {
 			printf("DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
@@ -142,25 +147,26 @@ int main(int argc, char* argv[]) {
 			printf("DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
-		}
+		}*/
 	}
 	if (memcmp(szInputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
 		bIfIsPhysicalDrive = true;
 
-		if (!DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
+		/*if (!DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
 			printf("DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
-		}
+		}*/
 		if (!bSizeSet) {
 			GetDriveSize(hSrcFile, &qwWriteSize);
 			printf("GetDriveSize(hSrcFile) %llu\n", qwWriteSize);
 		}
-
+		
 	}
-	if (!bSizeSet) {
+	if (!bSizeSet && !bIfIsPhysicalDrive) {
 		GetFileSizeEx(hSrcFile, &li);
 		qwWriteSize = li.QuadPart;
+		printf("GetFileSizeEx(hSrcFile) %llu\n", qwWriteSize);
 	}
 	if (!bIfSet && !bDataSet) {
 		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 9);
@@ -182,13 +188,13 @@ int main(int argc, char* argv[]) {
 	if (ret) {
 		printf("Error\nret = %d\n", ret);
 	}
-	if (bOfIsPhysicalDrive) {
+	/*if (bOfIsPhysicalDrive) {
 		if (!DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
 			printf("DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
 			Exit(EXIT_REASON_VOLUME_UNLOCK_ERROR, 7);
 			
 		}
-	}
+	}*/
 	else if (bDeleteFile) {
 		if (bDestHandleOpen)
 			CloseHandle(hDestFile);
@@ -200,11 +206,16 @@ int main(int argc, char* argv[]) {
 }
 void StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
 	printf("StrToQword(%s, %llu)\n", lpStr, *lpQwDest);
-	char suffix[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
+	char suffixLow[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
+	char suffixUpper[] = { 'S', 'K', 'M', 'G' };
 	QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824 };
 	DWORD dwStrLength = strlen(lpStr);
-	for (byte i = 0; i < sizeof(suffix); i++) {
-		if (lpStr[dwStrLength - 1] == suffix[i]) {
+	if (lpStr[dwStrLength - 1] >= '0' && lpStr[dwStrLength - 1] <= '9') {
+		*lpQwDest = strtoul(lpStr, 0, 10);
+		return;
+	}
+	for (byte i = 0; i < sizeof(suffixLow); i++) {
+		if (lpStr[dwStrLength - 1] == suffixLow[i] || lpStr[dwStrLength - 1] == suffixUpper[i]) {
 			char tmp[12];
 			memcpy(tmp, lpStr, dwStrLength - 1);
 			DWORD temp = strtoul(tmp, 0, 10);

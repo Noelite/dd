@@ -34,8 +34,9 @@ bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, registe
 
 void clear_screen();
 void ShowLastError(LPCSTR lpCaption);
-DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, DWORD dwBufferSize, QWORD qwFileSize);
-DWORD FillFile(HANDLE hFile, QWORD qwSize, DWORD dwBufferSize, BYTE data);
+DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize);
+DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data);
 DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize);
+bool LockDriveVolumes(DWORD dwDriveNumber);
 
 #endif
