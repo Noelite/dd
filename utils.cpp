@@ -222,15 +222,16 @@ bool LockDriveVolumes(DWORD dwDriveNumber) {
 	DWORD dwVolumes = GetLogicalDrives();
 	VOLUME_DISK_EXTENTS vde;
 	HANDLE hVolumeDismount[25];
+	char lettersDismount[25];
 	byte volumeIndex = 0;
 	DWORD dw;
-	printf("Préparation du verouillage des systèmes de fichiers sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
+	printf("Préparation du verouillage des systèmes de fichiers sur \\\\.\\PhysicalDrive%d...\n\n", dwDriveNumber);
 	for (byte i = 0; i < 26; i++) {
 
 		if (GETBIT(dwVolumes, i)) {
 			char szVol[7] = "\\\\.\\ :";
 			szVol[4] = i + 'A';
-			HANDLE hVolume = CreateFileA(szVol, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+			HANDLE hVolume = CreateFileA(szVol, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 			if (hVolume == INVALID_HANDLE_VALUE) {
 				printf("Impossible d'ouvrir le volume %s GetLastError() %d\n", szVol, GetLastError());
 				continue;
@@ -241,20 +242,22 @@ bool LockDriveVolumes(DWORD dwDriveNumber) {
 				continue;
 			}
 			if (vde.Extents[0].DiskNumber == dwDriveNumber) {
+				lettersDismount[volumeIndex] = i + 'A';
 				hVolumeDismount[volumeIndex++] = hVolume;
-
+				
 			}
+			else CloseHandle(hVolume);
 		}
 	}
 	for (byte i = 0; i < volumeIndex; i++) {
-		/*if (!DeviceIoControl(hVolumeDismount[i], FSCTL_DISMOUNT_VOLUME, 0, 0, 0, 0, &dw, 0)) {
-			printf("DeviceIoControl(FSCTL_DISMOUNT_VOLUME) GetLastError() %d\n", GetLastError());
-
-		}*/
+		printf("Préparation du verouillage du volume \\\\.\\%c: (%d/%d)\n", lettersDismount[i], i + 1, volumeIndex);
+		char szVol[4] = " :";
+		szVol[0] = lettersDismount[i];
 		if (!DeviceIoControl(hVolumeDismount[i], FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &dw, 0)) {
 			printf("DeviceIoControl(FSCTL_LOCK_VOLUME) GetLastError() %d\n", GetLastError());
 
 		}
+
 		CloseHandle(hVolumeDismount[i]);
 	}
 	return true;
@@ -274,12 +277,11 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 			return GetLastError();
 		}
 		if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &dw, NULL)) {
-
 			delete[] lpBuffer;
-			printf("Erreur d'écriture :\nPasse :%d\nPosition :%d", i, SetFilePointer(hDestFile, 0, 0, FILE_CURRENT));
+			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hDestFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
-
+		
 	}
 	if (dwRemainderSize == 0) return NO_ERROR;
 	
@@ -290,6 +292,7 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 	}
 	
 	if (!WriteFile(hDestFile, lpBuffer, dwRemainderSize, &dw, NULL)) {
+		
 		delete[] lpBuffer;
 		return GetLastError();
 	}

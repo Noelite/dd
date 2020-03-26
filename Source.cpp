@@ -6,11 +6,8 @@
 #define EXIT_REASON_INVALID_ARGUMENT 1U
 #define EXIT_REASON_PREVENT_CRASH 2U
 #define EXIT_REASON_NOT_ENOUGH_ARGUMENTS 3U
-#define EXIT_REASON_VOLUME_LOCK_ERROR 4U
-#define EXIT_REASON_VOLUME_UNLOCK_ERROR 5U
 
 void Exit(DWORD dwExitReason, DWORD dwExitCode);
-DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize);
 void StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 
 
@@ -19,7 +16,7 @@ bDestHandleOpen, bSrcHandleOpen;
 HANDLE hSrcFile = 0, hDestFile = 0;
 
 int main(int argc, char* argv[]) {
-
+	SetConsoleOutputCP(CP_UTF7);
 	if (argc < 3) {
 		int index = FindLastChar(argv[0], '.');
 		if (index != ERROR_CHAR_NOT_FOUND && memcmp(argv[0] + index, "exe", 3) == 0) {
@@ -29,17 +26,17 @@ int main(int argc, char* argv[]) {
 		printf("Arguments pour %s:\n"
 			   "if=\"fichier source\"\n"
 			   "of=\"fichier de destination\"\n"
-			   "bs=taille du buffer de copie (65536 par défaut)\n"
+			   "bs=taille du buffer d'écriture (1m par défaut)\n"
 			   "size=taille à copier (en octets)\n"
 			   "data=nombre (de 0 à 255, optionnel si if est renseigné)\n", argv[0]);
 		
-		Exit(EXIT_REASON_NO_REASON, 1);
+		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 1);
 	}
 	
 	byte data = 0;
 	char szInputFile[FILENAME_MAX];
 	char szOutputFile[FILENAME_MAX];
-	QWORD qwBufferSize = 65536;
+	QWORD qwBufferSize = 1 * 1024 * 1024;
 	QWORD qwWriteSize = 0;
 	
 
@@ -60,10 +57,10 @@ int main(int argc, char* argv[]) {
 
 		if (memcmp(argv[i], "of=", 3) == 0) {
 			strcpy(szOutputFile, argv[i] + 3);
-			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_NO_BUFFERING, NULL);
+			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH, NULL);
 			if (GetLastError() == ERROR_FILE_NOT_FOUND) {
 				CloseHandle(hDestFile);
-				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_NO_BUFFERING, NULL);
+				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL);
 			}
 			bDestHandleOpen = true;
 			bOfSet = true;
@@ -138,32 +135,18 @@ int main(int argc, char* argv[]) {
 		strcpy(tmp, szOutputFile + 17);
 		DWORD dwOutputFileDriveNumber = atoi(tmp);
 		LockDriveVolumes(dwOutputFileDriveNumber);
-		/*if (!DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, 0, 0, 0, 0, &ret, 0)) {
-			printf("DeviceIoControl(hDestFile, FSCTL_DISMOUNT_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
-			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
 
-		}
-		if (!DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
-			printf("DeviceIoControl(hDestFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
-			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
-
-		}*/
 	}
 	if (memcmp(szInputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
 		bIfIsPhysicalDrive = true;
 
-		/*if (!DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
-			printf("DeviceIoControl(hSrcFile, FSCTL_LOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
-			Exit(EXIT_REASON_VOLUME_LOCK_ERROR, 7);
-
-		}*/
-		if (!bSizeSet) {
-			GetDriveSize(hSrcFile, &qwWriteSize);
-			printf("GetDriveSize(hSrcFile) %llu\n", qwWriteSize);
-		}
 		
 	}
-	if (!bSizeSet && !bIfIsPhysicalDrive) {
+	if (!bSizeSet && (bOfIsPhysicalDrive || bIfIsPhysicalDrive)) {
+		GetDriveSize(bIfSet ? hSrcFile : hDestFile, &qwWriteSize);
+		printf("GetDriveSize(%s) %llu\n", bIfSet ? "hSrcFile" : "hDestFile", qwWriteSize);
+	}
+	if (!bSizeSet && bIfSet && !bIfIsPhysicalDrive) {
 		GetFileSizeEx(hSrcFile, &li);
 		qwWriteSize = li.QuadPart;
 		printf("GetFileSizeEx(hSrcFile) %llu\n", qwWriteSize);
@@ -177,25 +160,17 @@ int main(int argc, char* argv[]) {
 			qwWriteSize = li.QuadPart;
 
 		}
-		printf("call FillFile(%p, %llu, %lu, %d)\n", hDestFile, qwWriteSize, qwBufferSize, data);
 		ret = FillFile(hDestFile, qwWriteSize, qwBufferSize, data);
 		bOfSet = false;
 	}
 	else {
-		printf("call CopyLargeFile(%p, %p, %d, %llu)\n", hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
 		ret = CopyLargeFile(hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
 	}
-	if (ret) {
-		printf("Error\nret = %d\n", ret);
-	}
-	/*if (bOfIsPhysicalDrive) {
-		if (!DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, 0, 0, 0, 0, &ret, 0)) {
-			printf("DeviceIoControl(hDestFile, FSCTL_UNLOCK_VOLUME, ...)\nCode d'erreur : %d\n", GetLastError());
-			Exit(EXIT_REASON_VOLUME_UNLOCK_ERROR, 7);
-			
-		}
-	}*/
-	else if (bDeleteFile) {
+	
+	printf("\nret = %d\n", ret);
+	
+	
+	if (bDeleteFile) {
 		if (bDestHandleOpen)
 			CloseHandle(hDestFile);
 		bool a = DeleteFileA(szOutputFile);
@@ -243,14 +218,6 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode) {
 	}
 	case EXIT_REASON_NOT_ENOUGH_ARGUMENTS: {
 		printf("Pas assez d'arguments spécifiés. %d\n", dwExitCode);
-		ExitProcess(dwExitCode);
-	}
-	case EXIT_REASON_VOLUME_LOCK_ERROR: {
-		printf("Impossible de verouiler le volume. %d\n", dwExitCode);
-		ExitProcess(dwExitCode);
-	}
-	case EXIT_REASON_VOLUME_UNLOCK_ERROR: {
-		printf("Impossible de déverouiler le volume. %d\n", dwExitCode);
 		ExitProcess(dwExitCode);
 	}
 	default:
