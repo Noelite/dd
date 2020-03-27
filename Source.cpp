@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 		
 		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 1);
 	}
-	
+
 	byte data = 0;
 	char szInputFile[FILENAME_MAX];
 	char szOutputFile[FILENAME_MAX];
@@ -134,7 +134,7 @@ int main(int argc, char* argv[]) {
 		char tmp[4];
 		strcpy(tmp, szOutputFile + 17);
 		DWORD dwOutputFileDriveNumber = atoi(tmp);
-		LockDriveVolumes(dwOutputFileDriveNumber);
+		LockDriveVolumes(dwOutputFileDriveNumber, true);
 
 	}
 	if (memcmp(szInputFile, "\\\\.\\PhysicalDrive", 17) == 0) {

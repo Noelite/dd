@@ -218,14 +218,14 @@ void ShowLastError(LPCSTR lpCaption) {
 	strcat(lpFullMessage, errString);
 	MessageBox(NULL, lpFullMessage, lpCaption, MB_OK | MB_ICONERROR);
 }
-bool LockDriveVolumes(DWORD dwDriveNumber) {
+bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 	DWORD dwVolumes = GetLogicalDrives();
 	VOLUME_DISK_EXTENTS vde;
-	HANDLE hVolumeDismount[25];
-	char lettersDismount[25];
+	HANDLE hVolToLock[25];
+	char volumeLetterToLock[25];
 	byte volumeIndex = 0;
 	DWORD dw;
-	printf("Préparation du verouillage des systèmes de fichiers sur \\\\.\\PhysicalDrive%d...\n\n", dwDriveNumber);
+	printf("Préparation du verouillage des systèmes de fichiers sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
 	for (byte i = 0; i < 26; i++) {
 
 		if (GETBIT(dwVolumes, i)) {
@@ -238,27 +238,33 @@ bool LockDriveVolumes(DWORD dwDriveNumber) {
 			}
 
 			if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
-				printf("DeviceIoControl volume %s GetLastError %d\n", szVol, GetLastError());
+				if (GetDriveTypeA(szVol) != DRIVE_CDROM) {
+					printf("DeviceIoControl volume %s GetLastError %d\n", szVol, GetLastError());
+				}
+
 				continue;
 			}
 			if (vde.Extents[0].DiskNumber == dwDriveNumber) {
-				lettersDismount[volumeIndex] = i + 'A';
-				hVolumeDismount[volumeIndex++] = hVolume;
+				volumeLetterToLock[volumeIndex] = i + 'A';
+				hVolToLock[volumeIndex++] = hVolume;
 				
 			}
 			else CloseHandle(hVolume);
 		}
 	}
 	for (byte i = 0; i < volumeIndex; i++) {
-		printf("Préparation du verouillage du volume \\\\.\\%c: (%d/%d)\n", lettersDismount[i], i + 1, volumeIndex);
-		char szVol[4] = " :";
-		szVol[0] = lettersDismount[i];
-		if (!DeviceIoControl(hVolumeDismount[i], FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &dw, 0)) {
+		printf("Verouillage du volume %c: (%d/%d)...\n", volumeLetterToLock[i], i + 1, volumeIndex);
+
+		byte volData[4096];
+		ZeroMemory(volData, sizeof volData);
+		if (!WriteFile(hVolToLock[i], volData, sizeof volData, &dw, 0)) {
+			printf("WriteFile(hVolToLock[%d]) GetLastError() %d\n", i, GetLastError());
+		}
+		if (!DeviceIoControl(hVolToLock[i], FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &dw, 0)) {
 			printf("DeviceIoControl(FSCTL_LOCK_VOLUME) GetLastError() %d\n", GetLastError());
 
 		}
 
-		CloseHandle(hVolumeDismount[i]);
 	}
 	return true;
 }
@@ -269,11 +275,21 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 	DWORD dwPasses = qwFileSize / qwBufferSize;
 	LPBYTE lpBuffer = new BYTE[qwBufferSize];
 	DWORD dw;
-	printf("CopyLargeFile(%p, %p, %d, %llu)\n", hSrcFile, hDestFile, qwBufferSize, qwFileSize);
+	printf("CopyLargeFile(%p, %p, %d, %llu)\n\n", hSrcFile, hDestFile, qwBufferSize, qwFileSize);
+
+	char szProgress[3] = {0, 0, 0};
+	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
+	COORD coord;
+	CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
+	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
+	coord = consoleScreenInfo.dwCursorPosition;
+	coord.Y--;
+	WriteConsoleOutputCharacterA(hCons, "  %", 3, coord, &dw);
+
 	for (DWORD i = 0; i < dwPasses; i++) {
 		if (!ReadFile(hSrcFile, lpBuffer, qwBufferSize, &dw, NULL)) {
 			delete[] lpBuffer;
-			printf("Erreur de lecture :\nPasse :%d\nPosition :%d", i, SetFilePointer(hSrcFile, 0, 0, FILE_CURRENT));
+			printf("Erreur de lecture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hSrcFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
 		if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &dw, NULL)) {
@@ -281,6 +297,9 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hDestFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
+		
+		_itoa(i * 100 / dwPasses, szProgress, 10);
+		WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
 		
 	}
 	if (dwRemainderSize == 0) return NO_ERROR;
@@ -296,7 +315,7 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 		delete[] lpBuffer;
 		return GetLastError();
 	}
-
+	WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
 	delete[] lpBuffer;
 	return NO_ERROR;
 }
@@ -306,22 +325,35 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 	LPBYTE lpBuffer = new BYTE[qwBufferSize];
 	memset(lpBuffer, data, qwBufferSize);
 	DWORD dw;
-	printf("FillFile(%p, %llu, %llu, %d)\n", hFile, qwSize, qwBufferSize, data);
+	printf("FillFile(%p, %llu, %llu, %d)\n\n", hFile, qwSize, qwBufferSize, data);
+
+	char szProgress[3] = { 0, 0, 0 };
+	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
+	COORD coord;
+	CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
+	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
+	coord = consoleScreenInfo.dwCursorPosition;
+	coord.Y--;
+	WriteConsoleOutputCharacterA(hCons, "  %", 3, coord, &dw);
+
 	for (DWORD i = 0; i < dwPasses; i++) {
 		if (!WriteFile(hFile, lpBuffer, qwBufferSize, &dw, NULL)) {
 			delete[] lpBuffer;
-			printf("Erreur d'écriture :\nPasse :%d\nPosition :%d\n", i, SetFilePointer(hFile, 0, 0, FILE_CURRENT));
+			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
+
+		_itoa(i * 100 / dwPasses, szProgress, 10);
+		WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
 	}
 	if (dwRemainderSize == 0) return NO_ERROR;
 
 	if (!WriteFile(hFile, lpBuffer, dwRemainderSize, &dw, NULL)) {
 		delete[] lpBuffer;
-		printf("Erreur d'écriture :\nPosition :%d", SetFilePointer(hFile, 0, 0, FILE_CURRENT));
+		printf("Erreur d'écriture :\nPosition: %d\n", SetFilePointer(hFile, 0, 0, FILE_CURRENT));
 		return GetLastError();
 	}
-	
+	WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
 	delete[] lpBuffer;
 	return NO_ERROR;
 }

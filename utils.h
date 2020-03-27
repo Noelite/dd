@@ -37,6 +37,6 @@ void ShowLastError(LPCSTR lpCaption);
 DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize);
 DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data);
 DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize);
-bool LockDriveVolumes(DWORD dwDriveNumber);
+bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes);
 
 #endif
