@@ -1,5 +1,5 @@
 #include <Windows.h>
-#include "..\..\..\..\Desktop\Mathis\Code\headers\utils.h"
+#include "utils.h"
 
 
 #define EXIT_REASON_NO_REASON 0U
@@ -17,7 +17,39 @@ HANDLE hSrcFile = 0, hDestFile = 0;
 
 int main(int argc, char* argv[]) {
 	SetConsoleOutputCP(CP_UTF7);
-	if (argc < 3) {
+	
+	if (argc == 2 && Equal(argv[1], "getvol")) {
+		DWORD dwVolumesLetters = GetLogicalDrives();
+		char volumeLetter[26];
+		byte driveNumber[26];
+		bool bVolumeMounted[26];
+		char szVolumeLetter[7] = "\\\\.\\ :";
+		byte volumesCount = 0;
+		VOLUME_DISK_EXTENTS vde;
+		DWORD dw;
+
+		for (byte i = 0; i < 26; i++) {
+			if (GETBIT(dwVolumesLetters, i)) {
+				bVolumeMounted[i] = true;
+				szVolumeLetter[4] = i + 'A';
+				HANDLE hVolume = CreateFileA(szVolumeLetter, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, NULL, NULL);
+				printf("%s %lu\n", szVolumeLetter, GetLastError());
+				if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, NULL, &vde, sizeof vde, &dw, NULL)) {
+					printf("DeviceIoControl err %lu\n", GetLastError());
+					continue;
+				}
+				volumesCount++;
+			}
+			else {
+				bVolumeMounted[i] = false;
+			}
+
+			for (byte i = 0; i < volumesCount; i++) {
+				printf("PhysicalDrive%d:\n", driveNumber[i]);
+			}
+		}
+	}
+	else if (argc < 3) {
 		int index = FindLastChar(argv[0], '.');
 		if (index != ERROR_CHAR_NOT_FOUND && memcmp(argv[0] + index, "exe", 3) == 0) {
 			argv[index] = 0;
@@ -38,7 +70,6 @@ int main(int argc, char* argv[]) {
 	char szOutputFile[FILENAME_MAX];
 	QWORD qwBufferSize = 1 * 1024 * 1024;
 	QWORD qwWriteSize = 0;
-	
 
 	
 
@@ -48,8 +79,6 @@ int main(int argc, char* argv[]) {
 		}
 		if (memcmp(argv[i], "if=", 3) == 0) {
 			strcpy(szInputFile, argv[i] + 3);
-			hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
-			bSrcHandleOpen = true;
 			bIfSet = true;
 			continue;
 
@@ -57,12 +86,6 @@ int main(int argc, char* argv[]) {
 
 		if (memcmp(argv[i], "of=", 3) == 0) {
 			strcpy(szOutputFile, argv[i] + 3);
-			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH, NULL);
-			if (GetLastError() == ERROR_FILE_NOT_FOUND) {
-				CloseHandle(hDestFile);
-				hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL);
-			}
-			bDestHandleOpen = true;
 			bOfSet = true;
 			continue;
 
@@ -125,57 +148,135 @@ int main(int argc, char* argv[]) {
 		Exit(EXIT_REASON_INVALID_ARGUMENT, 6);
 	}
 	
-	LARGE_INTEGER li;
-	DWORD ret = 0;
 
-
-	if (memcmp(szOutputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
-		bOfIsPhysicalDrive = true;
-		char tmp[4];
-		strcpy(tmp, szOutputFile + 17);
-		DWORD dwOutputFileDriveNumber = atoi(tmp);
-		LockDriveVolumes(dwOutputFileDriveNumber, true);
-
+	if (bIfSet && bOfSet) {
+		char szInputFileTemp[FILENAME_MAX];
+		char szOutputFileTemp[FILENAME_MAX];
+		strcpy(szInputFileTemp, szInputFile);
+		strcpy(szOutputFileTemp, szOutputFile);
+		ToLower(szInputFileTemp);
+		ToLower(szOutputFileTemp);
+		if (Equal(szInputFileTemp, szOutputFileTemp)) {
+			printf("Les fichiers d'entrée et de sortie ne peuvent pas être les mêmes.\n");
+			Exit(EXIT_REASON_NO_REASON, 7);
+		}
 	}
-	if (memcmp(szInputFile, "\\\\.\\PhysicalDrive", 17) == 0) {
-		bIfIsPhysicalDrive = true;
 
+	if (bIfSet) {
+		hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
+		bSrcHandleOpen = true;
+		if (hSrcFile == INVALID_HANDLE_VALUE) {
+			printf("Impossible d'ouvrir le fichier source. Code d'erreur : %lu\n", GetLastError());
+			Exit(EXIT_REASON_NO_REASON, 8);
+		}
+	}
+	if (bOfSet) {
+		hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH, NULL);
+		bDestHandleOpen = true;
+		DWORD dwLastError = GetLastError();
+		if (dwLastError == ERROR_FILE_NOT_FOUND) {
+			CloseHandle(hDestFile);
+			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH, NULL);
+			if (hDestFile == INVALID_HANDLE_VALUE) {
+				printf("Impossible de créer le fichier de destination. Code d'erreur : %lu\n", GetLastError());
+				Exit(EXIT_REASON_NO_REASON, 9);
+			}
+		}
+		else {
+			if (dwLastError != NO_ERROR) {
+				printf("Impossible d'ouvrir le fichier de destination. Code d'erreur : %lu\n", dwLastError);
+				Exit(EXIT_REASON_NO_REASON, 10);
+			}
+
+		}
 		
 	}
+
+	LARGE_INTEGER li;
+	DWORD ret;
+	DWORD dwOutputFileDriveNumber;
+
+	char szBuffer[17];
+	memcpy(szBuffer, szOutputFile, 17);
+	ToLower(szBuffer);
+	if (memcmp(szBuffer, "\\\\.\\physicaldrive", 17) == 0) {
+		bOfIsPhysicalDrive = true;
+		char tmp[8];
+		strcpy(tmp, szOutputFile + 17);
+		dwOutputFileDriveNumber = atoi(tmp);
+		if (dwOutputFileDriveNumber == 0) {
+			printf("Le disque sélectionné est le disque système.\nContinuer tout de même ? ");
+			char response[256];
+			scanf("%s", response);
+			ToLower(response);
+
+			if (!Equal(response, "oui")) {
+				Exit(EXIT_REASON_NO_REASON, 11);
+			}
+			
+		}
+
+	}
+
+	memcpy(szBuffer, szInputFile, 17);
+	ToLower(szBuffer);
+	if (memcmp(szInputFile, "\\\\.\\physicaldrive", 17) == 0) {
+		bIfIsPhysicalDrive = true;
+		
+	}
+	QWORD qwDestSize = 0, qwSrcSize = 0;
 	if (!bSizeSet && (bOfIsPhysicalDrive || bIfIsPhysicalDrive)) {
-		GetDriveSize(bIfSet ? hSrcFile : hDestFile, &qwWriteSize);
-		printf("GetDriveSize(%s) %llu\n", bIfSet ? "hSrcFile" : "hDestFile", qwWriteSize);
+		GetDriveSize(bIfIsPhysicalDrive ? hSrcFile : hDestFile, bIfIsPhysicalDrive ? &qwSrcSize : &qwDestSize);
+		printf("GetDriveSize(%s) %llu\n", bIfIsPhysicalDrive ? "hSrcFile" : "hDestFile", bIfSet ? qwSrcSize : qwDestSize);
 	}
 	if (!bSizeSet && bIfSet && !bIfIsPhysicalDrive) {
 		GetFileSizeEx(hSrcFile, &li);
-		qwWriteSize = li.QuadPart;
-		printf("GetFileSizeEx(hSrcFile) %llu\n", qwWriteSize);
+		qwSrcSize = li.QuadPart;
+		printf("GetFileSizeEx(hSrcFile) %llu\n", qwSrcSize);
+	}
+	if (!bSizeSet && !bOfIsPhysicalDrive) {
+		GetFileSizeEx(hDestFile, &li);
+		qwDestSize = li.QuadPart;
+
 	}
 	if (!bIfSet && !bDataSet) {
-		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 9);
+		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 12);
 	}
-	if (!bIfSet) {
-		if (!bSizeSet && !bOfIsPhysicalDrive) {
-			GetFileSizeEx(hDestFile, &li);
-			qwWriteSize = li.QuadPart;
+	if (bOfIsPhysicalDrive)
+		LockDriveVolumes(dwOutputFileDriveNumber, !bSizeSet && (qwSrcSize == qwDestSize));
 
+	printf("qwSrcSize:%llu, qwDestSize:%llu\n", qwSrcSize, qwDestSize);
+	if (!bSizeSet) {
+		if (qwSrcSize != 0 && qwDestSize != 0) {
+			qwWriteSize = (qwSrcSize < qwDestSize) ? qwSrcSize : qwDestSize;
 		}
+		else {
+			if (qwSrcSize == 0) qwWriteSize = qwDestSize;
+			else if (qwDestSize == 0) qwWriteSize = qwSrcSize;
+		}
+		
+
+	}
+
+	if (!bIfSet) {
+
 		ret = FillFile(hDestFile, qwWriteSize, qwBufferSize, data);
-		bOfSet = false;
+		
 	}
 	else {
 		ret = CopyLargeFile(hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
 	}
 	
-	printf("\nret = %d\n", ret);
-	
+	printf("\nret = %lu\n", ret);
 	
 	if (bDeleteFile) {
-		if (bDestHandleOpen)
+		if (bDestHandleOpen) {
 			CloseHandle(hDestFile);
-		bool a = DeleteFileA(szOutputFile);
-		if (!a)
-			printf("DeleteFileA err %d\n", GetLastError());
+			bDestHandleOpen = false;
+		}
+		
+		if (!DeleteFileA(szOutputFile))
+			printf("DeleteFileA err %lu\n", GetLastError());
 	}
 	Exit(EXIT_REASON_NO_REASON, 0);
 }
@@ -208,19 +309,26 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode) {
 		CloseHandle(hDestFile);
 
 	switch (dwExitReason) {
+	case EXIT_REASON_NO_REASON: {
+		goto exit;
+
+	}
 	case EXIT_REASON_INVALID_ARGUMENT: {
-		printf("Argument invalide. %d\n", dwExitCode);
-		ExitProcess(dwExitCode);
+		printf("Argument invalide.\n");
+		goto exit;
 	}
 	case EXIT_REASON_PREVENT_CRASH: {
-		printf("Erreur d'application. %d\n", dwExitCode);
-		ExitProcess(dwExitCode);
+		printf("Erreur d'application.\n");
+		goto exit;
 	}
 	case EXIT_REASON_NOT_ENOUGH_ARGUMENTS: {
-		printf("Pas assez d'arguments spécifiés. %d\n", dwExitCode);
-		ExitProcess(dwExitCode);
+		printf("Pas assez d'arguments spécifiés.\n");
+		goto exit;
 	}
 	default:
 		break;
 	}
+exit:
+	printf("Code d'arrêt : %lu\n", dwExitCode);
+	ExitProcess(dwExitCode);
 }

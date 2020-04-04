@@ -225,7 +225,7 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 	char volumeLetterToLock[25];
 	byte volumeIndex = 0;
 	DWORD dw;
-	printf("Préparation du verouillage des systèmes de fichiers sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
+	printf("Préparation du verouillage des volumes sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
 	for (byte i = 0; i < 26; i++) {
 
 		if (GETBIT(dwVolumes, i)) {
@@ -238,7 +238,7 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 			}
 
 			if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
-				if (GetDriveTypeA(szVol) != DRIVE_CDROM) {
+				if (GetDriveTypeA(szVol + 4) != DRIVE_CDROM) {
 					printf("DeviceIoControl volume %s GetLastError %d\n", szVol, GetLastError());
 				}
 
@@ -255,11 +255,14 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 	for (byte i = 0; i < volumeIndex; i++) {
 		printf("Verouillage du volume %c: (%d/%d)...\n", volumeLetterToLock[i], i + 1, volumeIndex);
 
-		byte volData[4096];
-		ZeroMemory(volData, sizeof volData);
-		if (!WriteFile(hVolToLock[i], volData, sizeof volData, &dw, 0)) {
-			printf("WriteFile(hVolToLock[%d]) GetLastError() %d\n", i, GetLastError());
+		if (bDeleteVolumes) {
+			byte volData[4096];
+			ZeroMemory(volData, sizeof volData);
+			if (!WriteFile(hVolToLock[i], volData, sizeof volData, &dw, 0)) {
+				printf("WriteFile(hVolToLock[%d]) GetLastError() %d\n", i, GetLastError());
+			}
 		}
+
 		if (!DeviceIoControl(hVolToLock[i], FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &dw, 0)) {
 			printf("DeviceIoControl(FSCTL_LOCK_VOLUME) GetLastError() %d\n", GetLastError());
 
@@ -284,7 +287,8 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
 	coord = consoleScreenInfo.dwCursorPosition;
 	coord.Y--;
-	WriteConsoleOutputCharacterA(hCons, "  %", 3, coord, &dw);
+	WriteConsoleOutputCharacterA(hCons, "0 %", 3, coord, &dw);
+	byte currentProgress = 0, oldProgress = 0;
 
 	for (DWORD i = 0; i < dwPasses; i++) {
 		if (!ReadFile(hSrcFile, lpBuffer, qwBufferSize, &dw, NULL)) {
@@ -297,9 +301,13 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hDestFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
-		
-		_itoa(i * 100 / dwPasses, szProgress, 10);
-		WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
+		currentProgress = i * 100 / dwPasses;
+		if (currentProgress != oldProgress) {
+			oldProgress = currentProgress;
+			_itoa(currentProgress, szProgress, 10);
+			WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
+		}
+
 		
 	}
 	if (dwRemainderSize == 0) return NO_ERROR;
@@ -334,7 +342,8 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
 	coord = consoleScreenInfo.dwCursorPosition;
 	coord.Y--;
-	WriteConsoleOutputCharacterA(hCons, "  %", 3, coord, &dw);
+	WriteConsoleOutputCharacterA(hCons, "0 %", 3, coord, &dw);
+	byte currentProgress = 0, oldProgress = 0;
 
 	for (DWORD i = 0; i < dwPasses; i++) {
 		if (!WriteFile(hFile, lpBuffer, qwBufferSize, &dw, NULL)) {
@@ -342,9 +351,13 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hFile, 0, 0, FILE_CURRENT));
 			return GetLastError();
 		}
-
-		_itoa(i * 100 / dwPasses, szProgress, 10);
-		WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
+		
+		currentProgress = i * 100 / dwPasses;
+		if (currentProgress != oldProgress) {
+			oldProgress = currentProgress;
+			_itoa(currentProgress, szProgress, 10);
+			WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
+		}
 	}
 	if (dwRemainderSize == 0) return NO_ERROR;
 
