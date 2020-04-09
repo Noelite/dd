@@ -218,59 +218,7 @@ void ShowLastError(LPCSTR lpCaption) {
 	strcat(lpFullMessage, errString);
 	MessageBox(NULL, lpFullMessage, lpCaption, MB_OK | MB_ICONERROR);
 }
-bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
-	DWORD dwVolumes = GetLogicalDrives();
-	VOLUME_DISK_EXTENTS vde;
-	HANDLE hVolToLock[25];
-	char volumeLetterToLock[25];
-	byte volumeIndex = 0;
-	DWORD dw;
-	printf("Préparation du verouillage des volumes sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
-	for (byte i = 0; i < 26; i++) {
 
-		if (GETBIT(dwVolumes, i)) {
-			char szVol[7] = "\\\\.\\ :";
-			szVol[4] = i + 'A';
-			HANDLE hVolume = CreateFileA(szVol, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-			if (hVolume == INVALID_HANDLE_VALUE) {
-				printf("Impossible d'ouvrir le volume %s GetLastError() %d\n", szVol, GetLastError());
-				continue;
-			}
-
-			if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
-				if (GetDriveTypeA(szVol + 4) != DRIVE_CDROM) {
-					printf("DeviceIoControl volume %s GetLastError %d\n", szVol, GetLastError());
-				}
-
-				continue;
-			}
-			if (vde.Extents[0].DiskNumber == dwDriveNumber) {
-				volumeLetterToLock[volumeIndex] = i + 'A';
-				hVolToLock[volumeIndex++] = hVolume;
-				
-			}
-			else CloseHandle(hVolume);
-		}
-	}
-	for (byte i = 0; i < volumeIndex; i++) {
-		printf("Verouillage du volume %c: (%d/%d)...\n", volumeLetterToLock[i], i + 1, volumeIndex);
-
-		if (bDeleteVolumes) {
-			byte volData[4096];
-			ZeroMemory(volData, sizeof volData);
-			if (!WriteFile(hVolToLock[i], volData, sizeof volData, &dw, 0)) {
-				printf("WriteFile(hVolToLock[%d]) GetLastError() %d\n", i, GetLastError());
-			}
-		}
-
-		if (!DeviceIoControl(hVolToLock[i], FSCTL_LOCK_VOLUME, 0, 0, 0, 0, &dw, 0)) {
-			printf("DeviceIoControl(FSCTL_LOCK_VOLUME) GetLastError() %d\n", GetLastError());
-
-		}
-
-	}
-	return true;
-}
 DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize) {
 	
 	
@@ -370,14 +318,16 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 	delete[] lpBuffer;
 	return NO_ERROR;
 }
-DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize) {
-	DWORD dw;
-	GET_LENGTH_INFORMATION diskLengthInfo;
 
-	if (!DeviceIoControl(hDrive, IOCTL_DISK_GET_LENGTH_INFO, 0, 0, &diskLengthInfo, sizeof GET_LENGTH_INFORMATION, &dw, NULL)) {
+DWORD SetFileSize(HANDLE hFile, QWORD qwSize) {
+	printf("SetFileSize(%p, %llu)\n", hFile, qwSize);
+	LARGE_INTEGER li;
+	li.QuadPart = qwSize;
+	if (!SetFilePointerEx(hFile, li, NULL, FILE_BEGIN)) {
 		return GetLastError();
 	}
-
-	*lpQwSize = diskLengthInfo.Length.QuadPart;
+	if (!SetEndOfFile(hFile)) {
+		return GetLastError();
+	}
 	return NO_ERROR;
 }

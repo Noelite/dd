@@ -39,7 +39,7 @@ bool Equal(LPCSTR lpStr1, LPCSTR lpStr2) {
 		}
 		index++;
 	}
-	return true;
+	return lpStr1[index] == lpStr2[index] ? true : false;
 }
 void RawStrCpy(LPCSTR lpSrc, LPSTR lpDest) {
 	DWORD i = 0;
@@ -68,6 +68,7 @@ void ToLower(LPSTR str) {
 		if (str[i] >= 65 && str[i] <= 90) {
 			str[i] += 32;
 		}
+		i++;
 	}
 }
 void ToUpper(LPSTR str) {
