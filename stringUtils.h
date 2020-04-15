@@ -7,15 +7,17 @@
 
 #define ERROR_CHAR_NOT_FOUND -1
 
-
+typedef unsigned long long QWORD;
 void BuildEnvString(LPCSTR, LPSTR);
 bool Equal(LPCSTR lpStr1, LPCSTR lpStr2);
+bool Equal(LPCVOID lpBuf1, LPCVOID lpBuf2, QWORD qwSize);
 int FindCharIndex(LPSTR string, const char charToFind, int indexInString);
-void RawStrCpy(LPCSTR lpSrc, LPSTR lpDest);
 void InvertCharsUpperLower(LPSTR);
 DWORD HowMany(LPCSTR, const char);
-void ToLower(LPSTR);
-void ToUpper(LPSTR);
+void ToLower(LPSTR lpszSource);
+void ToLower(LPSTR lpszSource, QWORD qwSize);
+void ToUpper(LPSTR lpszSource);
+void ToUpper(LPSTR lpszSource, QWORD qwSize);
 void MakeFileNameValid(LPSTR str);
 LPSTR GetFileName(LPSTR);
 bool Contains(LPCSTR lpStr, const char ch);

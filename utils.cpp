@@ -50,9 +50,7 @@ bool OverflowDirectory(register LPSTR lpFullName, register ULONG64 nFiles, regis
 		
 	}
 	bool filenameContainsDriveLetter = 0;
-	if (isLetter(lpFileName[0], true) && lpFileName[1] == ':')
-		filenameContainsDriveLetter = true;
-	if (isLetter(lpFileName[0], false) && lpFileName[1] == ':') { //si le nom de fichier commence par une lettre de lecteur
+	if (IsLetter(lpFileName[0]) && lpFileName[1] == ':') { //si le nom de fichier commence par une lettre de lecteur
 		*lpFileName -= 32;
 		filenameContainsDriveLetter = true;
 	}
@@ -111,7 +109,7 @@ bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, registe
 
 	}
 	bool filenameContainsDriveLetter = 0;
-	if (isLetter(fileName[0], false) && fileName[1] == ':') { //si le nom de fichier commence par une lettre de lecteur
+	if (IsLetter(fileName[0]) && fileName[1] == ':') { //si le nom de fichier commence par une lettre de lecteur
 		*fileName -= 32;
 		filenameContainsDriveLetter = true;
 	}
@@ -158,11 +156,9 @@ void Pause(bool state) {
 	_getch();
 }
 
-bool isLetter(const char _char, bool upper) {
-	if (upper) {
-		return _char >= 'A' && _char <= 'Z';
-	}
-	return _char >= 'a' && _char <= 'z';
+bool IsLetter(const char _char) {
+	return (_char >= 'A' && _char <= 'Z') || (_char >= 'a' && _char <= 'z');
+
 }
 void boolToString(const bool bl, LPSTR lpDest) {
 	if (bl) {
@@ -198,8 +194,8 @@ bool answerToBool(LPCSTR ans) {
 		return true;
 	return false;
 }
-int reste(int a, int b) {
-	int _reste = (int)a / b;
+QWORD reste(QWORD a, QWORD b) {
+	QWORD _reste = (int)a / b;
 	return a - _reste * b;
 }
 bool isPathValid(LPCSTR lpPath) {
@@ -222,11 +218,11 @@ void ShowLastError(LPCSTR lpCaption) {
 DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize) {
 	
 	
-	DWORD dwRemainderSize = reste(qwFileSize, qwBufferSize);
+	QWORD qwRemainderSize = reste(qwFileSize, qwBufferSize);
 	DWORD dwPasses = qwFileSize / qwBufferSize;
 	LPBYTE lpBuffer = new BYTE[qwBufferSize];
-	DWORD dw;
-	printf("CopyLargeFile(%p, %p, %d, %llu)\n\n", hSrcFile, hDestFile, qwBufferSize, qwFileSize);
+	DWORD dw, dwRetCode, dwWriteFileRet;
+	printf("CopyLargeFile(%p, %p, %llu, %llu)\n\n", hSrcFile, hDestFile, qwBufferSize, qwFileSize);
 
 	char szProgress[3] = {0, 0, 0};
 	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -239,15 +235,16 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 	byte currentProgress = 0, oldProgress = 0;
 
 	for (DWORD i = 0; i < dwPasses; i++) {
-		if (!ReadFile(hSrcFile, lpBuffer, qwBufferSize, &dw, NULL)) {
-			delete[] lpBuffer;
-			printf("Erreur de lecture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hSrcFile, 0, 0, FILE_CURRENT));
-			return GetLastError();
+		if (!(dwWriteFileRet = ReadFile(hSrcFile, lpBuffer, qwBufferSize, &dw, NULL))) {
+			printf("Erreur de lecture :\nPasse: %lu\nPosition: %llu\nWriteFile: %lu\n", i, GetFilePointer(hSrcFile), dwWriteFileRet);
+			dwRetCode = GetLastError();
+			goto exit;
 		}
-		if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &dw, NULL)) {
-			delete[] lpBuffer;
-			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hDestFile, 0, 0, FILE_CURRENT));
-			return GetLastError();
+		
+		if (!(dwWriteFileRet = WriteFile(hDestFile, lpBuffer, qwBufferSize, &dw, NULL))) {
+			printf("Erreur d'écriture :\nPasse: %lu\nPosition: %llu\nWriteFile: %lu\n", i, GetFilePointer(hSrcFile), dwWriteFileRet);
+			dwRetCode = GetLastError();
+			goto exit;
 		}
 		currentProgress = i * 100 / dwPasses;
 		if (currentProgress != oldProgress) {
@@ -258,29 +255,36 @@ DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD
 
 		
 	}
-	if (dwRemainderSize == 0) return NO_ERROR;
+	if (qwRemainderSize == 0) {
+		dwRetCode = NO_ERROR;
+		goto exit;
+	}
+
 	
-	ZeroMemory(lpBuffer, qwBufferSize);
-	if (!ReadFile(hSrcFile, lpBuffer, dwRemainderSize, &dw, NULL)) {
-		delete[] lpBuffer;
-		return GetLastError();
+	if (!(dwWriteFileRet = ReadFile(hSrcFile, lpBuffer, qwRemainderSize, &dw, NULL))) {
+		printf("Erreur de lecture :\nPosition: %llu\nWriteFile: %lu\n", GetFilePointer(hSrcFile), dwWriteFileRet);
+		dwRetCode = GetLastError();
+		goto exit;
 	}
 	
-	if (!WriteFile(hDestFile, lpBuffer, dwRemainderSize, &dw, NULL)) {
-		
-		delete[] lpBuffer;
-		return GetLastError();
+	if (!(dwWriteFileRet = WriteFile(hDestFile, lpBuffer, qwRemainderSize, &dw, NULL))) {
+		printf("Erreur d'écriture :\nPosition: %llu\nWriteFile: %lu\n", GetFilePointer(hSrcFile), dwWriteFileRet);
+		dwRetCode = GetLastError();
+		goto exit;
 	}
-	WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
+
+	dwRetCode = NO_ERROR;
+	exit:
+	if (!dwRetCode) WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
 	delete[] lpBuffer;
 	return NO_ERROR;
 }
 DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
-	DWORD dwRemainderSize = reste(qwSize, qwBufferSize);
+	QWORD qwRemainderSize = reste(qwSize, qwBufferSize);
 	DWORD dwPasses = qwSize / qwBufferSize;
 	LPBYTE lpBuffer = new BYTE[qwBufferSize];
 	memset(lpBuffer, data, qwBufferSize);
-	DWORD dw;
+	DWORD dw, dwRetCode;
 	printf("FillFile(%p, %llu, %llu, %d)\n\n", hFile, qwSize, qwBufferSize, data);
 
 	char szProgress[3] = { 0, 0, 0 };
@@ -295,9 +299,9 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 
 	for (DWORD i = 0; i < dwPasses; i++) {
 		if (!WriteFile(hFile, lpBuffer, qwBufferSize, &dw, NULL)) {
-			delete[] lpBuffer;
-			printf("Erreur d'écriture :\nPasse: %d\nPosition: %d\n", i, SetFilePointer(hFile, 0, 0, FILE_CURRENT));
-			return GetLastError();
+			printf("Erreur d'écriture :\nPasse: %lu\nPosition: %llu\n", i, GetFilePointer(hFile));
+			dwRetCode = GetLastError();
+			goto exit;
 		}
 		
 		currentProgress = i * 100 / dwPasses;
@@ -307,20 +311,24 @@ DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
 			WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
 		}
 	}
-	if (dwRemainderSize == 0) return NO_ERROR;
-
-	if (!WriteFile(hFile, lpBuffer, dwRemainderSize, &dw, NULL)) {
-		delete[] lpBuffer;
-		printf("Erreur d'écriture :\nPosition: %d\n", SetFilePointer(hFile, 0, 0, FILE_CURRENT));
-		return GetLastError();
+	if (qwRemainderSize == 0) {
+		dwRetCode = NO_ERROR;
+		goto exit;
 	}
-	WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
+
+	if (!WriteFile(hFile, lpBuffer, qwRemainderSize, &dw, NULL)) {
+		printf("Erreur d'écriture :\nPosition: %llu\n", GetFilePointer(hFile));
+		dwRetCode = GetLastError();
+		goto exit;
+	}
+	dwRetCode = NO_ERROR;
+	exit:
+	if (!dwRetCode) WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
 	delete[] lpBuffer;
-	return NO_ERROR;
+	return dwRetCode;
 }
 
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize) {
-	printf("SetFileSize(%p, %llu)\n", hFile, qwSize);
 	LARGE_INTEGER li;
 	li.QuadPart = qwSize;
 	if (!SetFilePointerEx(hFile, li, NULL, FILE_BEGIN)) {
@@ -330,4 +338,10 @@ DWORD SetFileSize(HANDLE hFile, QWORD qwSize) {
 		return GetLastError();
 	}
 	return NO_ERROR;
+}
+
+QWORD GetFilePointer(HANDLE hFile) {
+	LARGE_INTEGER li, _li = { 0 };
+	SetFilePointerEx(hFile, _li, &li, FILE_CURRENT);
+	return li.QuadPart;
 }

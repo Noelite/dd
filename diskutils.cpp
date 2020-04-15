@@ -64,10 +64,9 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 	return true;
 }
 
-bool LockVolume(LPCSTR szVolumePath, bool bDelete) {
+bool LockVolume(HANDLE hVolume, bool bDelete) {
 
 	DWORD dw;
-	HANDLE hVolume = CreateFile(szVolumePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
 	if (bDelete) {
 		byte volData[4096];
@@ -105,4 +104,32 @@ DWORD GetVolumeSize(HANDLE hVolume, QWORD* lpQwSize) {
 	}
 	*lpQwSize = vde.Extents[0].ExtentLength.QuadPart;
 	return NO_ERROR;
+}
+
+void GetPhysicalDrives(bool* lpbAvailablesDrives, DWORD* lpdwErrors, DWORD dwScanRange) {
+	char szDriveNumber[11];
+	char szPhysicalDriveString[38] = "\\\\.\\PhysicalDrive";
+	
+	for (DWORD i = 0; i < dwScanRange; i++) {
+
+		_ultoa(i, szDriveNumber, 10);
+		strcpy(szPhysicalDriveString + 17, szDriveNumber);
+		HANDLE hDrive = CreateFileA(szPhysicalDriveString, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, NULL, NULL);
+		if (hDrive == INVALID_HANDLE_VALUE) {
+			DWORD dwLastError = GetLastError();
+			if (dwLastError == ERROR_FILE_NOT_FOUND) {
+				lpbAvailablesDrives[i] = false;
+				continue;
+			}
+			else {
+				lpbAvailablesDrives[i] = true;
+				lpdwErrors[i] = dwLastError;
+				continue;
+			}
+		}
+		else {
+			lpbAvailablesDrives[i] = true;
+		}
+
+	}
 }

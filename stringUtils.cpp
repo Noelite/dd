@@ -31,6 +31,7 @@ void BuildEnvString(LPCSTR lpSrc, LPSTR lpDest) {
 	lpDest[dwDestPos] = lpSrc[dwSrcPos];
 	lpDest[dwDestPos] = 0;
 }
+
 bool Equal(LPCSTR lpStr1, LPCSTR lpStr2) {
 	DWORD index = 0;
 	while (lpStr1[index] != 0 && lpStr2[index] != 0) {
@@ -41,13 +42,16 @@ bool Equal(LPCSTR lpStr1, LPCSTR lpStr2) {
 	}
 	return lpStr1[index] == lpStr2[index] ? true : false;
 }
-void RawStrCpy(LPCSTR lpSrc, LPSTR lpDest) {
-	DWORD i = 0;
-	while (lpSrc[i] != 0) {
-		lpDest[i] = lpSrc[i];
-		i++;
+
+bool Equal(LPCVOID lpBuf1, LPCVOID lpBuf2, QWORD qwSize) {
+	LPCBYTE a = (LPCBYTE)lpBuf1, b = (LPCBYTE)lpBuf2;
+	for (QWORD i = 0; i < qwSize; i++) {
+		if (a[i] != b[i])
+			return false;
 	}
+	return true;
 }
+
 void InvertCharsUpperLower(LPSTR str) {
 	DWORD i = 0;
 	while (str[i] != 0) {
@@ -62,22 +66,40 @@ void InvertCharsUpperLower(LPSTR str) {
 		i++;
 	}
 }
-void ToLower(LPSTR str) {
-	DWORD i = 0;
-	while (str[i] != 0) {
-		if (str[i] >= 65 && str[i] <= 90) {
-			str[i] += 32;
+
+void ToLower(LPSTR lpszSource) {
+	QWORD i = 0;
+	while (lpszSource[i] != 0) {
+		if (lpszSource[i] >= 65 && lpszSource[i] <= 90) {
+			lpszSource[i] += 32;
 		}
 		i++;
 	}
 }
-void ToUpper(LPSTR str) {
-	DWORD i = 0;
-	while (str[i] != 0) {
-		if (str[i] >= 97 && str[i] <= 122) {
-			str[i] -= 32;
+
+void ToLower(LPSTR lpszSource, QWORD qwSize) {
+	for (QWORD i = 0; i < qwSize; i++) {
+		if (lpszSource[i] >= 65 && lpszSource[i] <= 90) {
+			lpszSource[i] += 32;
+		}
+	}
+}
+
+void ToUpper(LPSTR lpszSource) {
+	QWORD i = 0;
+	while (lpszSource[i] != 0) {
+		if (lpszSource[i] >= 97 && lpszSource[i] <= 122) {
+			lpszSource[i] -= 32;
 		}
 		i++;
+	}
+}
+
+void ToUpper(LPSTR lpszSource, QWORD qwSize) {
+	for (QWORD i = 0; i < qwSize; i++) {
+		if (lpszSource[i] >= 97 && lpszSource[i] <= 122) {
+			lpszSource[i] -= 32;
+		}
 	}
 }
 
@@ -91,6 +113,7 @@ DWORD HowMany(LPCSTR str, const char ch) {
 	}
 	return count;
 }
+
 LPSTR GetFileName(LPSTR fullName) {
 	int index = FindLastChar(fullName, '\\');
 	if (index == -1) {
@@ -108,6 +131,7 @@ LPSTR GetFileName(LPSTR fullName) {
 	return buffer;
 
 }
+
 void GetFileExt(LPCSTR lpStr, LPSTR lpDest) {
 	DWORD lastCharIndex = 0;
 	lastCharIndex = FindLastChar(lpStr, '.');
@@ -128,6 +152,7 @@ void GetFileExt(LPCSTR lpStr, LPSTR lpDest) {
 		*lpDest = 0;
 	}
 }
+
 bool RemoveFileExt(LPSTR str) {
 
 	USHORT index = FindLastChar(str, '.');
@@ -154,6 +179,7 @@ bool Contains(LPCSTR str, const char ch) {
 	}
 	return false;
 }
+
 bool Contains(LPCWSTR str, const wchar_t ch) {
 	DWORD cnt = 0;
 	while (str[cnt] != L'\0') {
@@ -162,6 +188,7 @@ bool Contains(LPCWSTR str, const wchar_t ch) {
 	}
 	return false;
 }
+
 bool StrContainsASCII(LPCSTR str) {
 
 	DWORD index = 0;
@@ -183,15 +210,14 @@ int FindLastChar(LPCSTR str, const char ch) {
 	}
 	return last;
 }
-void RemoveEnd(LPSTR str, DWORD _where, DWORD size) {
-	ZeroMemory(str + _where, size - _where);
-}
+
 DWORD FindFirstChar(LPCSTR str, const char ch) {
 	DWORD index = 0;
 	while (str[index++] != ch);
 	return index;
 
 }
+
 bool CheckValidFileName(LPCSTR str)
 {
 	short lenght = strlen(str);
@@ -202,6 +228,7 @@ bool CheckValidFileName(LPCSTR str)
 	}
 	return true;
 }
+
 void MakeFileNameValid(LPSTR str) {
 	short lenght = strlen(str);
 	LPSTR buffer = new char[FILENAME_MAX];
@@ -212,7 +239,7 @@ void MakeFileNameValid(LPSTR str) {
 			buffer[cnt++] = str[i];
 		}
 	}
-	RemoveEnd(buffer, cnt, sizeof buffer);
+	ZeroMemory(buffer + cnt, sizeof buffer - cnt);
 	strcpy(str, buffer);
 }
 void ShiftLeft(LPSTR lpSrc, DWORD count) {

@@ -15,12 +15,12 @@ typedef unsigned long long QWORD;
 #define SETBIT(variable, index, value) value ? (variable |= 1 << (index)) : (variable &= ~(1 << index))
 
 bool isPathValid(LPCSTR lpPath);
-int reste(int a, int b);
+QWORD reste(QWORD a, QWORD b);
 bool stringToBool(LPCSTR);
 void boolToString(const bool, LPSTR);
 void boolToAnswer(const bool, LPSTR);
 bool answerToBool(LPCSTR);
-bool isLetter(const char ch, bool upper = false);
+bool IsLetter(const char ch);
 bool IsProgramRunFromCommandPrompt();
 void Pause(bool = false);
 bool CheckValidFileName(LPCSTR str);
@@ -36,3 +36,4 @@ void ShowLastError(LPCSTR lpCaption);
 DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize);
 DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data);
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize);
+QWORD GetFilePointer(HANDLE hFile);
