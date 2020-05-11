@@ -12,10 +12,12 @@ void clear_screen() {
 	SetConsoleCursorPosition(hCons, coord_screen);
 
 }
+
 bool FileExist(LPCSTR lpFileName)
 {
 	HANDLE hFile = CreateFile(lpFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, NULL, NULL);
-	bool exist = GetLastError() != ERROR_FILE_NOT_FOUND;
+	DWORD dwLastError = GetLastError();
+	bool exist = dwLastError != ERROR_FILE_NOT_FOUND && dwLastError != ERROR_INVALID_NAME && dwLastError != ERROR_PATH_NOT_FOUND;
 	CloseHandle(hFile);
 	return exist;
 }
@@ -84,6 +86,7 @@ bool OverflowDirectory(register LPSTR lpFullName, register ULONG64 nFiles, regis
 	return true;
 
 }
+
 bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, register ULONG64 nFiles, register PULONG64 lpFiles,
 	register ULONG64 nResume, register bool* stop, register bool* pause)
 {
@@ -140,13 +143,12 @@ bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, registe
 	return true;
 	
 }
-bool IsProgramRunFromCommandPrompt() {
+DWORD GetConsolePID() {
 
 	HWND hwndCons = GetConsoleWindow();
 	DWORD pid;
 	GetWindowThreadProcessId(hwndCons, &pid);
-	return GetCurrentProcessId() == pid;
-
+	return pid;
 	
 }
 
@@ -156,10 +158,14 @@ void Pause(bool state) {
 	_getch();
 }
 
-bool IsLetter(const char _char) {
-	return (_char >= 'A' && _char <= 'Z') || (_char >= 'a' && _char <= 'z');
-
+bool IsLetter(const char ch) {
+	return (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
 }
+
+bool IsNumber(const char ch) {
+	return ch <= '9' && ch >= '0';
+}
+
 void boolToString(const bool bl, LPSTR lpDest) {
 	if (bl) {
 		strcpy(lpDest, "true");
@@ -167,6 +173,7 @@ void boolToString(const bool bl, LPSTR lpDest) {
 	}
 	strcpy(lpDest, "false");
 }
+
 bool stringToBool(LPCSTR string) {
 	if (strlen(string) > 4) {
 		return false;
@@ -179,9 +186,11 @@ bool stringToBool(LPCSTR string) {
 	}
 	return false;
 }
+
 void boolToAnswer(const bool bl, LPSTR lpDest) {
 	bl ? strcpy(lpDest, "Oui") : strcpy(lpDest, "Non");
 }
+
 bool answerToBool(LPCSTR ans) {
 	if (strlen(ans) > 3)
 		return false;
@@ -194,10 +203,12 @@ bool answerToBool(LPCSTR ans) {
 		return true;
 	return false;
 }
+
 QWORD reste(QWORD a, QWORD b) {
-	QWORD _reste = (int)a / b;
+	QWORD _reste = a / b;
 	return a - _reste * b;
 }
+
 bool isPathValid(LPCSTR lpPath) {
 	if (HowMany(lpPath, ':') > 1 &&
 		FindFirstChar(lpPath, ':') != 1 &&
@@ -206,6 +217,7 @@ bool isPathValid(LPCSTR lpPath) {
 	}
 	return true;
 }
+
 void ShowLastError(LPCSTR lpCaption) {
 	char errString[10] = "0x";
 	_itoa(GetLastError(), errString + 2, 16);
@@ -213,119 +225,6 @@ void ShowLastError(LPCSTR lpCaption) {
 	char lpFullMessage[54] = "Une erreur s'est produite.\nCode d'erreur : ";
 	strcat(lpFullMessage, errString);
 	MessageBox(NULL, lpFullMessage, lpCaption, MB_OK | MB_ICONERROR);
-}
-
-DWORD CopyLargeFile(HANDLE hSrcFile, HANDLE hDestFile, QWORD qwBufferSize, QWORD qwFileSize) {
-	
-	
-	QWORD qwRemainderSize = reste(qwFileSize, qwBufferSize);
-	DWORD dwPasses = qwFileSize / qwBufferSize;
-	LPBYTE lpBuffer = new BYTE[qwBufferSize];
-	DWORD dw, dwRetCode, dwWriteFileRet;
-	printf("CopyLargeFile(%p, %p, %llu, %llu)\n\n", hSrcFile, hDestFile, qwBufferSize, qwFileSize);
-
-	char szProgress[3] = {0, 0, 0};
-	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
-	COORD coord;
-	CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
-	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
-	coord = consoleScreenInfo.dwCursorPosition;
-	coord.Y--;
-	WriteConsoleOutputCharacterA(hCons, "0 %", 3, coord, &dw);
-	byte currentProgress = 0, oldProgress = 0;
-
-	for (DWORD i = 0; i < dwPasses; i++) {
-		if (!(dwWriteFileRet = ReadFile(hSrcFile, lpBuffer, qwBufferSize, &dw, NULL))) {
-			printf("Erreur de lecture :\nPasse: %lu\nPosition: %llu\nWriteFile: %lu\n", i, GetFilePointer(hSrcFile), dwWriteFileRet);
-			dwRetCode = GetLastError();
-			goto exit;
-		}
-		
-		if (!(dwWriteFileRet = WriteFile(hDestFile, lpBuffer, qwBufferSize, &dw, NULL))) {
-			printf("Erreur d'écriture :\nPasse: %lu\nPosition: %llu\nWriteFile: %lu\n", i, GetFilePointer(hSrcFile), dwWriteFileRet);
-			dwRetCode = GetLastError();
-			goto exit;
-		}
-		currentProgress = i * 100 / dwPasses;
-		if (currentProgress != oldProgress) {
-			oldProgress = currentProgress;
-			_itoa(currentProgress, szProgress, 10);
-			WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
-		}
-
-		
-	}
-	if (qwRemainderSize == 0) {
-		dwRetCode = NO_ERROR;
-		goto exit;
-	}
-
-	
-	if (!(dwWriteFileRet = ReadFile(hSrcFile, lpBuffer, qwRemainderSize, &dw, NULL))) {
-		printf("Erreur de lecture :\nPosition: %llu\nWriteFile: %lu\n", GetFilePointer(hSrcFile), dwWriteFileRet);
-		dwRetCode = GetLastError();
-		goto exit;
-	}
-	
-	if (!(dwWriteFileRet = WriteFile(hDestFile, lpBuffer, qwRemainderSize, &dw, NULL))) {
-		printf("Erreur d'écriture :\nPosition: %llu\nWriteFile: %lu\n", GetFilePointer(hSrcFile), dwWriteFileRet);
-		dwRetCode = GetLastError();
-		goto exit;
-	}
-
-	dwRetCode = NO_ERROR;
-	exit:
-	if (!dwRetCode) WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
-	delete[] lpBuffer;
-	return NO_ERROR;
-}
-DWORD FillFile(HANDLE hFile, QWORD qwSize, QWORD qwBufferSize, BYTE data) {
-	QWORD qwRemainderSize = reste(qwSize, qwBufferSize);
-	DWORD dwPasses = qwSize / qwBufferSize;
-	LPBYTE lpBuffer = new BYTE[qwBufferSize];
-	memset(lpBuffer, data, qwBufferSize);
-	DWORD dw, dwRetCode;
-	printf("FillFile(%p, %llu, %llu, %d)\n\n", hFile, qwSize, qwBufferSize, data);
-
-	char szProgress[3] = { 0, 0, 0 };
-	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
-	COORD coord;
-	CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
-	GetConsoleScreenBufferInfo(hCons, &consoleScreenInfo);
-	coord = consoleScreenInfo.dwCursorPosition;
-	coord.Y--;
-	WriteConsoleOutputCharacterA(hCons, "0 %", 3, coord, &dw);
-	byte currentProgress = 0, oldProgress = 0;
-
-	for (DWORD i = 0; i < dwPasses; i++) {
-		if (!WriteFile(hFile, lpBuffer, qwBufferSize, &dw, NULL)) {
-			printf("Erreur d'écriture :\nPasse: %lu\nPosition: %llu\n", i, GetFilePointer(hFile));
-			dwRetCode = GetLastError();
-			goto exit;
-		}
-		
-		currentProgress = i * 100 / dwPasses;
-		if (currentProgress != oldProgress) {
-			oldProgress = currentProgress;
-			_itoa(currentProgress, szProgress, 10);
-			WriteConsoleOutputCharacterA(hCons, szProgress, 2, coord, &dw);
-		}
-	}
-	if (qwRemainderSize == 0) {
-		dwRetCode = NO_ERROR;
-		goto exit;
-	}
-
-	if (!WriteFile(hFile, lpBuffer, qwRemainderSize, &dw, NULL)) {
-		printf("Erreur d'écriture :\nPosition: %llu\n", GetFilePointer(hFile));
-		dwRetCode = GetLastError();
-		goto exit;
-	}
-	dwRetCode = NO_ERROR;
-	exit:
-	if (!dwRetCode) WriteConsoleOutputCharacterA(hCons, "100%", 4, coord, &dw);
-	delete[] lpBuffer;
-	return dwRetCode;
 }
 
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize) {

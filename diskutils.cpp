@@ -1,6 +1,6 @@
 #include "diskutils.h"
 
-bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
+bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes, bool bQuiet) {
 	DWORD dwVolumes = GetLogicalDrives();
 	VOLUME_DISK_EXTENTS vde;
 	HANDLE hVolToLock[128];		// 128 = Maximum de partitions sur un disque GPT
@@ -8,17 +8,20 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 	WORD volumeIndex = 0;
 	DWORD dw;
 	HANDLE hVolumeSearch;
-	char szVolumeGUID[50];
+	char szVolumeGUID[49];
+	char szVolumeGUIDRoot[50];
+	szVolumeGUID[48] = 0;
 
-	printf("Préparation du verouillage des volumes sur \\\\.\\PhysicalDrive%d...\n", dwDriveNumber);
-	if (!(hVolumeSearch = FindFirstVolumeA(szVolumeGUID, sizeof szVolumeGUID))) {
+	if (!(hVolumeSearch = FindFirstVolumeA(szVolumeGUIDRoot, sizeof szVolumeGUIDRoot))) {
 		printf("FindFirstVolume err: %lu\n", GetLastError());
 		return false;
 	}
 	goto inLoop;
-	while (FindNextVolumeA(hVolumeSearch, szVolumeGUID, sizeof szVolumeGUID)) {
+	while (FindNextVolumeA(hVolumeSearch, szVolumeGUIDRoot, sizeof szVolumeGUIDRoot)) {
 	inLoop:
-		szVolumeGUID[strlen(szVolumeGUID) - 1] = 0;
+
+		memcpy(szVolumeGUID, szVolumeGUIDRoot, 48);
+		
 		
 		HANDLE hVolume = CreateFileA(szVolumeGUID, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 		if (hVolume == INVALID_HANDLE_VALUE) {
@@ -27,9 +30,14 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 		}
 
 		if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
-			if (GetDriveTypeA(szVolumeGUID) != DRIVE_CDROM) {
-				printf("DeviceIoControl volume %s err: %lu\n", szVolumeGUID, GetLastError());
+			DWORD dwError = GetLastError();
+			if (dwError == ERROR_MORE_DATA)
+				continue;
+
+			if (GetDriveTypeA(szVolumeGUIDRoot) != DRIVE_CDROM) {
+				printf("DeviceIoControl volume %s err: %lu\n", szVolumeGUID, dwError);
 			}
+			
 
 			continue;
 		}
@@ -42,9 +50,16 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes) {
 
 	}
 	for (byte i = 0; i < volumeIndex; i++) {
-		printf("Verouillage du volume %d/%d...\n", i + 1, volumeIndex);
+		
+		QWORD qwVolSize;
+		if (GetVolumeSize(hVolToLock[i], &qwVolSize) != NO_ERROR || qwVolSize == 0) {
+			continue;
+		}
 
-		if (bDeleteVolumes) {
+		if (!bQuiet)
+			printf("Verouillage du volume %d/%d...\n", i + 1, volumeIndex);
+		
+			if (bDeleteVolumes) {
 			byte volData[4096];
 			ZeroMemory(volData, sizeof volData);
 			if (!WriteFile(hVolToLock[i], volData, sizeof volData, &dw, 0)) {

@@ -43,10 +43,10 @@ bool Equal(LPCSTR lpStr1, LPCSTR lpStr2) {
 	return lpStr1[index] == lpStr2[index] ? true : false;
 }
 
-bool Equal(LPCVOID lpBuf1, LPCVOID lpBuf2, QWORD qwSize) {
-	LPCBYTE a = (LPCBYTE)lpBuf1, b = (LPCBYTE)lpBuf2;
+bool Equal(LPCSTR lpBuf1, LPCSTR lpBuf2, QWORD qwSize) {
+	
 	for (QWORD i = 0; i < qwSize; i++) {
-		if (a[i] != b[i])
+		if (lpBuf1[i] != lpBuf2[i])
 			return false;
 	}
 	return true;
@@ -199,10 +199,10 @@ bool StrContainsASCII(LPCSTR str) {
 	return true;
 }
 
-int FindLastChar(LPCSTR str, const char ch) {
+DWORD FindLastChar(LPCSTR str, const char ch) {
 
-	int i = 0, last = -1;
-	while (str[i] != '\0') {
+	DWORD i = 0, last = ERROR_CHAR_NOT_FOUND;
+	while (str[i] != 0) {
 		if (str[i] == ch)
 			last = i;
 
@@ -213,8 +213,13 @@ int FindLastChar(LPCSTR str, const char ch) {
 
 DWORD FindFirstChar(LPCSTR str, const char ch) {
 	DWORD index = 0;
-	while (str[index++] != ch);
-	return index;
+	while (str[index] != 0) {
+		if (str[index] == ch) {
+			return index;
+		}
+		index++;
+	}
+	return ERROR_CHAR_NOT_FOUND;
 
 }
 
