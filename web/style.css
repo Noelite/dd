@@ -3,3 +3,22 @@ body {
     font-family: "Helvetica", "Arial", "Consolas";
     
 }
+#img_noel{
+    position: absolute;
+    top: calc(50% - 150px);
+    left: calc(50% - 50px);
+    height: 100px;
+    width: 100px;
+}
+#h1_vaincra{
+    position: absolute;
+    top: calc(50% - 50px);
+    left: calc(50% - 55px);
+    
+}
+#_3{
+    position: absolute;
+    top: calc(50% - 10px);
+    left: calc(50% - 90px);
+    
+}
