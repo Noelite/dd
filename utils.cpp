@@ -48,7 +48,6 @@ bool OverflowDirectory(register LPSTR lpFullName, register ULONG64 nFiles, regis
 		
 		MakeFileNameValid(ext);
 		
-		RemoveFileExt(lpFileName);
 		
 	}
 	bool filenameContainsDriveLetter = 0;
@@ -108,7 +107,6 @@ bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, registe
 
 		MakeFileNameValid(ext);
 
-		RemoveFileExt(fileName);
 
 	}
 	bool filenameContainsDriveLetter = 0;
@@ -204,15 +202,15 @@ bool answerToBool(LPCSTR ans) {
 	return false;
 }
 
-QWORD reste(QWORD a, QWORD b) {
-	QWORD _reste = a / b;
-	return a - _reste * b;
+QWORD Remainder(QWORD a, QWORD b) {
+	QWORD qwRemainder = a / b;
+	return a - qwRemainder * b;
 }
 
-bool isPathValid(LPCSTR lpPath) {
-	if (HowMany(lpPath, ':') > 1 &&
+bool IsPathValid(LPCSTR lpPath) {
+	if (GetChars(lpPath, ':') > 1 &&
 		FindFirstChar(lpPath, ':') != 1 &&
-		strlen(lpPath) > _MAX_PATH) {
+		strlen(lpPath) > MAX_PATH) {
 		return false;
 	}
 	return true;

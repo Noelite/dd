@@ -110,7 +110,7 @@ void OctToBin(LPSTR szSrc, LPSTR szDest)
 				break;
 			}
 			
-			bits[o] = reste(symb, 2) + '0';
+			bits[o] = Remainder(symb, 2) + '0';
 			symb /= 2;
 		}
 		
@@ -156,7 +156,7 @@ void HexToBin(LPSTR szSrc, LPSTR szDest)
 		somme_bits = 0;
 		for (byte a = 0; a < 4; a++) {
 			isAszhaChar = IsHexAszha(szSrc[nSymboles]);
-			_reste = reste(isAszhaChar ? szSrc[nSymboles] - 'A' : szSrc[nSymboles] - '0', 2);
+			_reste = Remainder(isAszhaChar ? szSrc[nSymboles] - 'A' : szSrc[nSymboles] - '0', 2);
 			if (isAszhaChar) { if (szSrc[nSymboles] - 'A' == 0) break; }
 
 			szDest[bitsIndex] = _reste;

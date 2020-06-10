@@ -25,7 +25,10 @@ bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes, bool bQuiet) {
 		
 		HANDLE hVolume = CreateFileA(szVolumeGUID, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 		if (hVolume == INVALID_HANDLE_VALUE) {
-			printf("Impossible d'ouvrir le volume %s err: %lu\n", szVolumeGUID, GetLastError());
+			DWORD dwLastError = GetLastError();
+			if (dwLastError == ERROR_FILE_NOT_FOUND)
+				continue;
+			printf("Impossible d'ouvrir le volume %s err: %lu\n", szVolumeGUID, dwLastError);
 			continue;
 		}
 

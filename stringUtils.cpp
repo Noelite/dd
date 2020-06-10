@@ -52,18 +52,16 @@ bool Equal(LPCSTR lpBuf1, LPCSTR lpBuf2, QWORD qwSize) {
 	return true;
 }
 
-void InvertCharsUpperLower(LPSTR str) {
-	DWORD i = 0;
-	while (str[i] != 0) {
-		if (str[i] <= 90 && str[i] >= 65) {
-			str[i] += 32;
+void InvertCase(LPSTR str) {
+	LPSTR _str = str;
+	while (*_str++ != 0) {
+		if (*_str <= 90 && *_str >= 65) {
+			*_str += 32;
 			continue;
 		}
-		if (str[i] <= 122 && str[i] >= 97) {
-			str[i] -= 32;
-
+		if (*_str <= 122 && *_str >= 97) {
+			*_str -= 32;
 		}
-		i++;
 	}
 }
 
@@ -77,8 +75,8 @@ void ToLower(LPSTR lpszSource) {
 	}
 }
 
-void ToLower(LPSTR lpszSource, QWORD qwSize) {
-	for (QWORD i = 0; i < qwSize; i++) {
+void ToLower(LPSTR lpszSource, DWORD dwSize) {
+	for (DWORD i = 0; i < dwSize; i++) {
 		if (lpszSource[i] >= 65 && lpszSource[i] <= 90) {
 			lpszSource[i] += 32;
 		}
@@ -95,21 +93,22 @@ void ToUpper(LPSTR lpszSource) {
 	}
 }
 
-void ToUpper(LPSTR lpszSource, QWORD qwSize) {
-	for (QWORD i = 0; i < qwSize; i++) {
+void ToUpper(LPSTR lpszSource, DWORD dwSize) {
+	for (DWORD i = 0; i < dwSize; i++) {
 		if (lpszSource[i] >= 97 && lpszSource[i] <= 122) {
 			lpszSource[i] -= 32;
 		}
 	}
 }
 
-DWORD HowMany(LPCSTR str, const char ch) {
-	DWORD i = 0, count = 0;
-	while (str[i] != 0) {
-		if (str[i] == ch) {
+DWORD GetChars(LPCSTR str, const char ch) {
+	DWORD count = 0;
+	LPSTR _str = (LPSTR)str;
+	while (*_str != 0) {
+		if (*_str == ch) {
 			count++;
 		}
-		i++;
+		_str++;
 	}
 	return count;
 }
@@ -132,71 +131,19 @@ LPSTR GetFileName(LPSTR fullName) {
 
 }
 
-void GetFileExt(LPCSTR lpStr, LPSTR lpDest) {
-	DWORD lastCharIndex = 0;
-	lastCharIndex = FindLastChar(lpStr, '.');
-	if (lastCharIndex == 0) {
-		strcpy(lpDest, lpStr);
-		return;
-	}
-	if (lastCharIndex == -1) {
-		return;
-	}
-
-	DWORD lenght = strlen(lpStr);
-	if (lenght == 0) return;
-	
-
-
-	if (Contains(lpStr + lastCharIndex, ' ')) {
-		*lpDest = 0;
-	}
-}
-
-bool RemoveFileExt(LPSTR str) {
-
-	USHORT index = FindLastChar(str, '.');
-
-	if (index == -1) {
+bool GetFileExt(LPCSTR lpStr, LPSTR lpDest) {
+	DWORD dwLastDot = FindLastChar(lpStr, '.');
+	if (dwLastDot == ERROR_CHAR_NOT_FOUND)
 		return false;
-	}
-	USHORT len = strlen(str);
-
-	short i = 0;
-	for (i = index; i < len; i++) {
-		str[i] = 0;
-	}
-
-	return true;
 }
 
 bool Contains(LPCSTR str, const char ch) {
-	DWORD cnt = 0;
-	while (str[cnt] != '\0') {
-		if (str[cnt] == ch)
-			return true;
-		cnt++;
-	}
-	return false;
-}
-
-bool Contains(LPCWSTR str, const wchar_t ch) {
-	DWORD cnt = 0;
-	while (str[cnt] != L'\0') {
-		if (str[cnt++] == ch)
+	LPSTR _str = (LPSTR)str;
+	while (*_str != 0) {
+		if (*_str++ == ch)
 			return true;
 	}
 	return false;
-}
-
-bool StrContainsASCII(LPCSTR str) {
-
-	DWORD index = 0;
-	while (str[index++] != '\0') {
-		if (!isascii(str[index]))
-			return false;
-	}
-	return true;
 }
 
 DWORD FindLastChar(LPCSTR str, const char ch) {
@@ -247,6 +194,7 @@ void MakeFileNameValid(LPSTR str) {
 	ZeroMemory(buffer + cnt, sizeof buffer - cnt);
 	strcpy(str, buffer);
 }
+
 void ShiftLeft(LPSTR lpSrc, DWORD count) {
 	DWORD len = strlen(lpSrc);
 	DWORD base = 0;
@@ -256,6 +204,7 @@ void ShiftLeft(LPSTR lpSrc, DWORD count) {
 	}
 	ZeroMemory(lpSrc + len - count, count);
 }
+
 void ShiftRight(LPSTR lpSrc, DWORD count) {
 	DWORD i = strlen(lpSrc);
 	while (lpSrc[i] != 0) {
@@ -263,6 +212,7 @@ void ShiftRight(LPSTR lpSrc, DWORD count) {
 		i--;
 	}
 }
+
 int FindCharIndex(LPSTR lpSrc, const char char_to_find, int index) {
 	int cnt = 0;
 	int i = 0;
@@ -275,4 +225,33 @@ int FindCharIndex(LPSTR lpSrc, const char char_to_find, int index) {
 		i++;
 	}
 	return -1;
+}
+
+void RemoveSpaces(LPSTR* lpsz) {
+	DWORD dwLength = strlen(*lpsz) - 1;
+	while (**lpsz == ' ') {
+		(*lpsz)++;
+		dwLength--;
+	}
+	while ((*lpsz)[dwLength] == ' ') {
+		(*lpsz)[dwLength--] = 0;
+	}
+}
+
+void RemoveSpaces(LPSTR* lpsz, DWORD dwLength) {
+	while (**lpsz == ' ') {
+		(*lpsz)++;
+		dwLength--;
+	}
+	while ((*lpsz)[dwLength] == ' ') {
+		(*lpsz)[dwLength--] = 0;
+	}
+}
+
+void ReplaceAllChars(LPSTR lpsz, const char _old, const char _new) {
+	while (*lpsz != 0) {
+		if (*lpsz == _old)
+			*lpsz = _new;
+		lpsz++;
+	}
 }

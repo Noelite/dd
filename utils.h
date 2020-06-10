@@ -14,8 +14,8 @@ typedef unsigned long long QWORD;
 #define GETBIT(variable, index) (variable >> (index) & 1)
 #define SETBIT(variable, index, value) value ? (variable |= 1 << (index)) : (variable &= ~(1 << index))
 
-bool isPathValid(LPCSTR lpPath);
-QWORD reste(QWORD a, QWORD b);
+bool IsPathValid(LPCSTR lpPath);
+QWORD Remainder(QWORD a, QWORD b);
 bool stringToBool(LPCSTR);
 void boolToString(const bool, LPSTR);
 void boolToAnswer(const bool, LPSTR);
