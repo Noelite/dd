@@ -227,24 +227,22 @@ int FindCharIndex(LPSTR lpSrc, const char char_to_find, int index) {
 	return -1;
 }
 
-void RemoveSpaces(LPSTR* lpsz) {
-	DWORD dwLength = strlen(*lpsz) - 1;
-	while (**lpsz == ' ') {
-		(*lpsz)++;
-		dwLength--;
-	}
-	while ((*lpsz)[dwLength] == ' ') {
-		(*lpsz)[dwLength--] = 0;
+void RemoveEndSpaces(LPSTR lpsz) {
+	
+	DWORD dwLength = strlen(lpsz);
+	if (dwLength == 0)
+		return;
+	while (lpsz[dwLength] == ' ') {
+		lpsz[dwLength--] = 0;
 	}
 }
 
-void RemoveSpaces(LPSTR* lpsz, DWORD dwLength) {
-	while (**lpsz == ' ') {
-		(*lpsz)++;
-		dwLength--;
-	}
-	while ((*lpsz)[dwLength] == ' ') {
-		(*lpsz)[dwLength--] = 0;
+void RemoveEndSpaces(LPSTR lpsz, DWORD dwLength) {
+
+	if (*lpsz == 0)
+		return;
+	while (lpsz[--dwLength] == ' ') {
+		lpsz[dwLength] = 0;
 	}
 }
 

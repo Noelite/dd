@@ -3,7 +3,7 @@
 const char hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 const char oct[8] = { '0', '1', '2', '3', '4', '5', '6', '7'};
 
-bool isBinaryString(LPCSTR szSrc) {
+bool IsBinaryString(LPCSTR szSrc) {
 	USHORT i = 0;
 	while (szSrc[i] != 0) {
 		if (szSrc[i] != '0' && szSrc[i] != '1') {
@@ -13,7 +13,7 @@ bool isBinaryString(LPCSTR szSrc) {
 	}
 	return true;
 }
-bool isOctalString(LPCSTR szSrc) {
+bool IsOctalString(LPCSTR szSrc) {
 	USHORT i = 0;
 	while (szSrc[i] != 0) {
 		if (szSrc[i] < '0' || szSrc[i] > '7') {
@@ -23,7 +23,7 @@ bool isOctalString(LPCSTR szSrc) {
 	}
 	return true;
 }
-bool isDecimalString(LPCSTR szSrc) {
+bool IsDecimalString(LPCSTR szSrc) {
 	USHORT i = 0;
 	while (szSrc[i] != 0) {
 		if (szSrc[i] < '0' || szSrc[i] > '9') {
@@ -33,7 +33,7 @@ bool isDecimalString(LPCSTR szSrc) {
 	}
 	return true;
 }
-bool isHexString(LPCSTR szSrc) {
+bool IsHexString(LPCSTR szSrc) {
 	USHORT i = 0;
 	while (szSrc[i] != 0) {
 		if (szSrc[i] < '0' || szSrc[i] > '9' && (szSrc[i] < 'A' || szSrc[i] > 'F')) {

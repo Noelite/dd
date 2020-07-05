@@ -20,7 +20,7 @@ HANDLE hSrcFile = 0, hDestFile = 0;
 
 int main(int argc, char* argv[]) {
 	SetConsoleOutputCP(CP_UTF7);
-	
+
 	if (argc == 2) {
 		char szBuffer[10];
 		
@@ -69,7 +69,10 @@ int main(int argc, char* argv[]) {
 
 				hVolume = CreateFileA(szVolumeGUID, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, NULL, NULL);
 				if (hVolume == INVALID_HANDLE_VALUE) {
-					printf("CreateFile(%s) err: %lu\n\n", szVolumeGUID, GetLastError());
+					DWORD dwLastError = GetLastError();
+					if (dwLastError == ERROR_FILE_NOT_FOUND)
+						continue;
+					printf("CreateFile(%s) err: %lu\n\n", szVolumeGUID, dwLastError);
 					CloseHandle(hVolume);
 					continue;
 				}
@@ -173,7 +176,6 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (Equal(szBuffer, "getdisk")) {
-			bool bAvailablesDrives[64];
 			char szDriveNumber[11];
 			char szPhysicalDriveString[38] = "\\\\.\\PhysicalDrive";
 
@@ -211,21 +213,20 @@ int main(int argc, char* argv[]) {
 	}
 
 	else if (argc < 3) {
-		int index = FindLastChar(argv[0], '.');
-		if (index != ERROR_CHAR_NOT_FOUND && Equal(argv[0] + index, ".exe")) {
-			argv[0][index] = 0;
-			
-		}
-		printf("Arguments pour %s:\n"
-			   "if=\"fichier source\".\n"
-			   "of=\"fichier de destination\".\n"
-			   "bs=taille du buffer d'écriture (1m par défaut).\n"
-			   "size=nombre d'octets à écrire.\n"
-			   "data=valeur (de 0 à 255, optionnel si if est spécifié). Ce paramètre remplit le fichier spécifié par of avec la valeur.\n"
-			   "delvol: supprime les volumes sur of si le fichier spécifié est un disque physique (\\\\.\\PhysicalDrive...). Utilisez ce paramètres si vous appliquez une image plus petite que le disque de destination pour éviter des effets innatendus.\n",
-			argv[0]);
+
+		puts("\n"
+				"if=\"fichier source\".\n"
+				"of=\"fichier de destination\".\n"
+				"bs=n       : Copie par blocs de n octets (1m par défaut)\n"
+				"size=n     : Copie seulement n octets.\n"
+				"data=octet : Remplit le fichier de destination avec la valeur donnée.\n"
+				"delvol     : Supprime les volumes sur le fichier de destination si c'est un disque physique (\\\\.\\PhysicalDrive...). Utilisez ce paramètres si vous appliquez une image plus petite que le disque de destination.\n"
+				"getdisk    : Liste tous les disques trouvés sur cet ordinateur et leur capacité.\n"
+				"getvol     : Liste les volumes et les informations de base.\n"
+				"getvolex   : Pareil que getvol mais affiche plus d'informations."
+		);
 		
-		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 5);
+		Exit(EXIT_REASON_NO_REASON, 0);
 	}
 
 	byte data = 0;
@@ -292,7 +293,7 @@ int main(int argc, char* argv[]) {
 				Exit(EXIT_REASON_INVALID_ARGUMENT, 12);
 			}
 
-			if (reste(qwBufferSize, 512) != 0) {
+			if (Remainder(qwBufferSize, 512) != 0) {
 				puts("La taille du buffer doit être un multiple de la taille d'un secteur (512).");
 				Exit(EXIT_REASON_ERROR_OTHER, 13);
 			}
@@ -406,6 +407,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	LARGE_INTEGER li;
+	char szBuffer[50];
+	szBuffer[17] = 0;
 
 	if (bIfSet) {
 		char szInputFileTemp[FILENAME_MAX];
@@ -440,6 +443,17 @@ int main(int argc, char* argv[]) {
 				}
 			}
 		}
+		
+		memcpy(szBuffer, szInputFile, 17);
+		ToLower(szBuffer);
+		if (Equal(szBuffer, "\\\\.\\physicaldrive") || Equal(szBuffer, "\\\\?\\physicaldrive")) {
+			if (!IsDecimalString(szInputFile + 17)) {
+				puts("Le disque source n'est pas valide.");
+				Exit(EXIT_REASON_INVALID_ARGUMENT, 381);
+			}
+			bIfIsPhysicalDrive = true;
+		}
+		
 
 
 		hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -484,46 +498,16 @@ int main(int argc, char* argv[]) {
 			}
 		}
 	}
-	
-	hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
-	bDestHandleOpen = true;
-	DWORD dwLastError = GetLastError();
-	if (dwLastError == ERROR_FILE_NOT_FOUND) {
-		CloseHandle(hDestFile);
-		hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
-		if (hDestFile == INVALID_HANDLE_VALUE) {
-			printf("Impossible de créer le fichier de destination. Code d'erreur : %lu\n", GetLastError());
-			Exit(EXIT_REASON_NO_REASON, 34);
 
-		}
-	}
-	else {
-		if (dwLastError != NO_ERROR) {
-			printf("Impossible d'ouvrir le fichier de destination. Code d'erreur : %lu\n", dwLastError);
-			Exit(EXIT_REASON_NO_REASON, 35);
-		}
-
-	}
-	if (bSetOfPtr) {
-		if (qwOfSp == 0) {
-			Exit(EXIT_REASON_INVALID_ARGUMENT, 36);
-		}
-		li.QuadPart = qwOfSp;
-		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
-			printf("Impossible de déplacer le pointeur du fichier de destination: %lu\n", GetLastError());
-			Exit(EXIT_REASON_NO_REASON, 37);
-		}
-		
-	}
-	
-	DWORD ret;
 	DWORD dwOutputFileDriveNumber;
 
-	char szBuffer[50];
-	szBuffer[17] = 0;
 	memcpy(szBuffer, szOutputFile, 17);
 	ToLower(szBuffer);
 	if (Equal(szBuffer, "\\\\.\\physicaldrive") || Equal(szBuffer, "\\\\?\\physicaldrive")) {
+		if (!IsDecimalString(szOutputFile + 17)) {
+			puts("Le disque de destination n'est pas valide.");
+			Exit(EXIT_REASON_INVALID_ARGUMENT, 371);
+		}
 		bOfIsPhysicalDrive = true;
 		char tmp[8];
 		strcpy(tmp, szOutputFile + 17);
@@ -537,28 +521,57 @@ int main(int argc, char* argv[]) {
 			if (!Equal(response, "oui")) {
 				Exit(EXIT_REASON_NO_REASON, 38);
 			}
-			
+
 		}
 
 	}
 
-	if (bIfSet) {
-		memcpy(szBuffer, szInputFile, 17);
-		ToLower(szBuffer);
-		if (Equal(szBuffer, "\\\\.\\physicaldrive") || Equal(szBuffer, "\\\\?\\physicaldrive")) {
-			bIfIsPhysicalDrive = true;
+
+	
+	hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
+	bDestHandleOpen = true;
+	if (hDestFile == INVALID_HANDLE_VALUE) {
+		DWORD dwLastError = GetLastError();
+		if (dwLastError == ERROR_FILE_NOT_FOUND) {
+			CloseHandle(hDestFile);
+			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
+			if (hDestFile == INVALID_HANDLE_VALUE) {
+				printf("Impossible de créer le fichier de destination. Code d'erreur : %lu\n", GetLastError());
+				Exit(EXIT_REASON_NO_REASON, 34);
+
+			}
+		}
+		else if (dwLastError != NO_ERROR) {
+			printf("Impossible d'ouvrir le fichier de destination. Code d'erreur : %lu\n", dwLastError);
+			Exit(EXIT_REASON_NO_REASON, 35);
 		
+
 		}
 	}
+
+	if (bSetOfPtr) {
+		if (qwOfSp == 0) {
+			Exit(EXIT_REASON_INVALID_ARGUMENT, 36);
+		}
+		li.QuadPart = qwOfSp;
+		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
+			printf("Impossible de déplacer le pointeur du fichier de destination: %lu\n", GetLastError());
+			Exit(EXIT_REASON_NO_REASON, 37);
+		}
+		
+	}
+	
+	DWORD ret;
+
 	const char szPtrPosError[] = "La position du pointeur de fichier doit être un multiple de 512 sur les disques/volumes.";
 	if ((bOfIsPhysicalDrive || bOfIsVolume) && bSetOfPtr) {
-		if (reste(qwOfSp, 512) != 0) {
+		if (Remainder(qwOfSp, 512) != 0) {
 			puts(szPtrPosError);
 			Exit(EXIT_REASON_ERROR_OTHER, 39);
 		}
 	}
 	if ((bIfIsPhysicalDrive || bIfIsVolume) && bSetIfPtr) {
-		if (reste(qwIfSp, 512) != 0) {
+		if (Remainder(qwIfSp, 512) != 0) {
 			puts(szPtrPosError);
 			Exit(EXIT_REASON_ERROR_OTHER, 40);
 		}
@@ -623,8 +636,6 @@ int main(int argc, char* argv[]) {
 		LockVolume(hDestFile, bDeleteVolumes);
 	}
 
-	if (!bSizeSet && !bQuietMode)
-		printf("qwSrcSize:%llu, qwDestSize:%llu\n", qwSrcSize, qwDestSize);
 
 	if (!bSizeSet) {
 		bool tinner = qwSrcSize < qwDestSize; // false = qwSrcSize, true = qwDestSize
@@ -658,7 +669,7 @@ int main(int argc, char* argv[]) {
 startOperation:
 
 	if (bPrealloc && !bOfIsPhysicalDrive && !bOfIsVolume && !bSetFileSize) {
-		if ((ret = SetFileSize(hDestFile, qwWriteSize)) != NO_ERROR) {
+		if ((ret = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) != NO_ERROR) {
 			printf("Impossible de préallouer la taille du fichier: %lu\n", ret);
 			Exit(EXIT_REASON_ERROR_OTHER, 43);
 		}
@@ -674,52 +685,56 @@ startOperation:
 	}
 	else {
 
-		if (qwBufferSize > qwWriteSize && reste(qwWriteSize, 512) == 0) {
+		if (qwBufferSize > qwWriteSize && Remainder(qwWriteSize, 512) == 0) {
 			qwBufferSize = qwWriteSize;
 		}
 		char szProgress[3] = { 0, 0, 0 };
-		CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
 		byte currentProgress = 0, oldProgress = 0;
-		GetConsoleScreenBufferInfo(hConsole, &consoleScreenInfo);
-		QWORD qwRemainderSize = reste(qwWriteSize, qwBufferSize);
-		QWORD qwPasses = qwWriteSize / qwBufferSize;
-		LPBYTE lpBuffer = new BYTE[qwBufferSize];
-		DWORD dwSectorWriteSize = reste(qwRemainderSize, 512);
+		QWORD qwRemainderSize = qwWriteSize < 512 ? qwWriteSize : Remainder(qwWriteSize, qwBufferSize);
+		QWORD qwPasses = qwWriteSize < 512 ? 0 : qwWriteSize / qwBufferSize;
+		LPBYTE lpBuffer = (LPBYTE)malloc(qwBufferSize);
+		if (lpBuffer == NULL) {
+			puts("Impossible d'allouer la mémoire pour la copie.");
+			Exit(EXIT_REASON_PREVENT_CRASH, 431);
+		}
+
+		DWORD dwSectorWriteSize = Remainder(qwRemainderSize, 512);
 		WORD wInSectorMiddleOffset = (qwRemainderSize >= 512) ? (512 - dwSectorWriteSize) : 512 - qwRemainderSize;
 		DWORD dwNumberOfSectors = qwWriteSize / 512;
 		bool bInSizeMiddleSector = bIfIsPhysicalDrive || bIfIsVolume ? (dwSectorWriteSize == 0 ? false : true) : false;
 		bool bOutSizeMiddleSector = bOfIsPhysicalDrive || bOfIsVolume ? (dwSectorWriteSize == 0 ? false : true) : false;
 
-		coord = consoleScreenInfo.dwCursorPosition;
-		if (!bQuietMode)
-			coord.Y++;
-		WriteConsoleOutputCharacterA(hConsole, "0 %", 3, coord, &ret);
+		if (!bQuietMode) {
+			if (bIfSet)
+				printf("CopyLargeFile(%s, %s, %llu, %llu)\n", szInputFile, szOutputFile, qwBufferSize, qwWriteSize);
+			else
+				printf("SeqWrite(%s, %llu, %llu, %d)\n", szOutputFile, qwWriteSize, qwBufferSize, data);
 
-		if (bQuietMode) {
-			coord.Y++;
-			SetConsoleCursorPosition(hConsole, coord);
-			coord.Y--;
 		}
 
+		CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
+		GetConsoleScreenBufferInfo(hConsole, &consoleScreenInfo);
+		coord = consoleScreenInfo.dwCursorPosition;
+		coord.X = 0;
+
+		puts("");
+		if (coord.Y >= consoleScreenInfo.dwSize.Y - 1)
+			coord.Y--;
+		
+		WriteConsoleOutputCharacterA(hConsole, "0 %", 3, coord, &ret);
+		
 
 		if (bIfSet) {
 
-			if (!bQuietMode) {
-				printf("CopyLargeFile(%p, %p, %llu, %llu)\n", hSrcFile, hDestFile, qwBufferSize, qwWriteSize);
-				coord.Y++;
-				SetConsoleCursorPosition(hConsole, coord);
-				coord.Y--;
-			}
-
 			for (QWORD i = 0; i < qwPasses; i++) {
 				if (!ReadFile(hSrcFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-					printf("Erreur de lecture:\nPasse: %lu\n", i);
+					puts("Erreur de lecture!");
 					ret = GetLastError();
 					goto end;
 				}
 
 				if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-					printf("Erreur d'écriture:\nPasse: %lu\n", i);
+					puts("Erreur d'écriture!");
 					ret = GetLastError();
 					goto end;
 				}
@@ -739,7 +754,7 @@ startOperation:
 
 			
 			if (!ReadFile(hSrcFile, lpBuffer, bInSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-				printf("Erreur de lecture:\nPosition: %llu\n", GetFilePointer(hSrcFile));
+				puts("Erreur de lecture!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -751,7 +766,7 @@ startOperation:
 				SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN);
 
 				if (!ReadFile(hDestFile, sectorDataTemp, 512, &ret, NULL)) {
-					puts("Erreur de lecture sur le disque de destination.");
+					puts("Erreur de lecture sur le disque de destination!");
 					ret = GetLastError();
 					goto end;
 				}
@@ -762,27 +777,21 @@ startOperation:
 			}
 
 			if (!WriteFile(hDestFile, lpBuffer, bOutSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-				printf("Erreur d'écriture:\nPosition: %llu\n", GetFilePointer(hDestFile));
+				puts("Erreur d'écriture!");
 				ret = GetLastError();
 				goto end;
 			}
 
-			delete[] lpBuffer;
+			free(lpBuffer);
 			ret = NO_ERROR;
 			goto end;
 		}
 
 		memset(lpBuffer, data, qwBufferSize);
-		if (!bQuietMode) {
-			printf("SeqWrite(%p, %llu, %llu, %d)\n", hDestFile, qwWriteSize, qwBufferSize, data);
-			coord.Y++;
-			SetConsoleCursorPosition(hConsole, coord);
-			coord.Y--;
-		}
 
 		for (QWORD i = 0; i < qwPasses; i++) {
 			if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-				printf("Erreur d'écriture:\nPasse: %lu\n", i);
+				puts("Erreur d'écriture!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -806,7 +815,7 @@ startOperation:
 			SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN);
 
 			if (!ReadFile(hDestFile, sectorDataTemp, 512, &ret, NULL)) {
-				puts("Erreur de lecture sur le disque de destination.");
+				puts("Erreur de lecture sur le disque de destination!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -817,14 +826,13 @@ startOperation:
 		}
 
 		if (!WriteFile(hDestFile, lpBuffer, bOutSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-			printf("Erreur d'écriture:\nPosition: %llu\n", GetFilePointer(hDestFile));
+			puts("Erreur d'écriture!");
 			ret = GetLastError();
 			goto end;
 		}
 
-		delete[] lpBuffer;
+		free(lpBuffer);
 		ret = NO_ERROR;
-		
 		goto end;
 
 	}
@@ -834,23 +842,26 @@ startOperation:
 end:
 	
 	if (ret != NO_ERROR) {
-		printf("\nCode d'erreur: %lu\n", ret);
+		printf("Code d'erreur: %lu\n", ret);
 		if (GetConsolePID() == GetCurrentProcessId()) {
 			_getch();
 		}
-		Exit(EXIT_REASON_ERROR_OTHER, 44);
+		Exit(EXIT_REASON_NO_REASON, 0);
 	}
 
-	if (!bSetFileSize)
+	if (!bSetFileSize) {
+		
 		WriteConsoleOutputCharacterA(hConsole, "100%", 4, coord, &ret);
+	}
 
 	
-
 	if (bEndFile && !bOfIsVolume && !bOfIsPhysicalDrive) {
-		if (dwLastError = SetFileSize(hDestFile, bSetOfPtr ? qwWriteSize + qwOfSp : qwWriteSize)) {
+		DWORD dwLastError;
+		if (dwLastError = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) {
 			printf("SetFileSizeEnd(%s) err: %lu\n", szOutputFile, dwLastError);
 		}
 	}
+
 	if (bDeleteIf && !bIfIsVolume && !bIfIsPhysicalDrive) {
 		if (bSrcHandleOpen) {
 			CloseHandle(hSrcFile);
@@ -860,6 +871,7 @@ end:
 		if (!DeleteFileA(szInputFile))
 			printf("DeleteFileA(%s) err: %lu\n", szInputFile, GetLastError());
 	}
+
 	if (bDeleteOf && !bOfIsVolume && !bOfIsPhysicalDrive) {
 		if (bDestHandleOpen) {
 			CloseHandle(hDestFile);
@@ -872,10 +884,11 @@ end:
 	
 	Exit(EXIT_REASON_NO_REASON, 0);
 }
+
 bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
-	char suffix[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
+	const char suffix[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
 	
-	QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824 };
+	const QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824 };
 	DWORD dwStrLength = 0;
 	byte lastDecimal = 0;
 	while (lpStr[dwStrLength] != 0) {
@@ -883,7 +896,7 @@ bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
 			lastDecimal++;
 		dwStrLength++;
 	}
-	if (dwStrLength > lastDecimal + 1)
+	if (dwStrLength > lastDecimal + 1)	// Erreur si le suffixe est supérieur à 1 caratère
 		return false;
 
 	if (lastDecimal == dwStrLength) {	// Si y'a pas de suffixe, la fonction renvoie le chiffre comme il est
@@ -892,8 +905,8 @@ bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
 	}
 
 	for (byte i = 0; i < sizeof(suffix); i++) {
-		if (lpStr[lastDecimal] == suffix[i] || lpStr[lastDecimal] == suffix[i] + 32) {
-			char tmp[18];
+		if (lpStr[lastDecimal] == suffix[i] || lpStr[lastDecimal] == (suffix[i] - 32)) {
+			char tmp[20];
 			memcpy(tmp, lpStr, lastDecimal);
 			DWORD temp = strtoul(lpStr, 0, 10);
 			*lpQwDest = temp * qwSuffixSize[i];

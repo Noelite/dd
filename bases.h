@@ -13,10 +13,10 @@
 #define IsHexSymb(symbol) (symbol >= 'A' && symbol <= 'F' && symbol <= '9' && symbol >= '0')
 #define IsHexAszha(symbol) (symbol >= 'A' && symbol <= 'F')
 
-bool isBinaryString(LPCSTR szStr);
-bool isOctalString(LPCSTR szStr);
-bool isHexString(LPCSTR szStr);
-bool isDecimalString(LPCSTR szStr);
+bool IsBinaryString(LPCSTR szStr);
+bool IsOctalString(LPCSTR szStr);
+bool IsHexString(LPCSTR szStr);
+bool IsDecimalString(LPCSTR szStr);
 
 void BinToOct(LPSTR szSrc, LPSTR szDest);
 void BinToDecimal(LPSTR szSrc, LPSTR szDest);

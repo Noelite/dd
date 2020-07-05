@@ -24,6 +24,6 @@ DWORD FindFirstChar(LPCSTR lpStr, const char);
 DWORD FindLastChar(LPCSTR lpStr, const char ch);
 void ShiftLeft(LPSTR lpsz, DWORD dwLength);
 void ShiftRight(LPSTR lpsz, DWORD dwLength);
-void RemoveSpaces(LPSTR* lpsz);
-void RemoveSpaces(LPSTR* lpsz, DWORD dwLength);
+void RemoveEndSpaces(LPSTR lpsz);
+void RemoveEndSpaces(LPSTR lpsz, DWORD dwLength);
 void ReplaceAllChars(LPSTR lpsz, const char _old, const char _new);

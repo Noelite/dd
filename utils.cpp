@@ -1,16 +1,15 @@
 #include "utils.h"
 
-void clear_screen() {
+void ClearConsole() {
 	HANDLE hCons = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD dwConSize, nCharsWritten;
 	_CONSOLE_SCREEN_BUFFER_INFO cbinfo;
 	COORD coord_screen = { 0,0 };
 	GetConsoleScreenBufferInfo(hCons, &cbinfo);
 	dwConSize = cbinfo.dwSize.X * cbinfo.dwSize.Y;
-	FillConsoleOutputCharacter(hCons, (CHAR)' ', dwConSize, coord_screen, &nCharsWritten);
+	FillConsoleOutputCharacter(hCons, (CHAR)'\0', dwConSize, coord_screen, &nCharsWritten);
 	FillConsoleOutputAttribute(hCons, cbinfo.wAttributes, dwConSize, coord_screen, &nCharsWritten);
 	SetConsoleCursorPosition(hCons, coord_screen);
-
 }
 
 bool FileExist(LPCSTR lpFileName)

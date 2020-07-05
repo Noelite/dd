@@ -32,7 +32,7 @@ bool OverflowDirectory(register LPSTR lpFullName, register ULONG64 nFiles, regis
 bool OverflowDirectoryFrom(register LPSTR fullName, register LPSTR dest, register ULONG64 nFiles,
 	register PULONG64 lpFiles, register ULONG64 nResume, register bool* stop, register bool* pause);
 
-void clear_screen();
+void ClearConsole();
 void ShowLastError(LPCSTR lpCaption);
 
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize);
