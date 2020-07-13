@@ -102,7 +102,7 @@ bool LockVolume(HANDLE hVolume, bool bDelete) {
 	
 }
 
-DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize) {
+DWORD GetDriveSize(HANDLE hDrive, QWORD* lpqwSize) {
 	DWORD dw;
 	GET_LENGTH_INFORMATION diskLengthInfo;
 
@@ -110,17 +110,17 @@ DWORD GetDriveSize(HANDLE hDrive, QWORD* lpQwSize) {
 		return GetLastError();
 	}
 
-	*lpQwSize = diskLengthInfo.Length.QuadPart;
+	*lpqwSize = diskLengthInfo.Length.QuadPart;
 	return NO_ERROR;
 }
 
-DWORD GetVolumeSize(HANDLE hVolume, QWORD* lpQwSize) {
+DWORD GetVolumeSize(HANDLE hVolume, QWORD* lpqwSize) {
 	DWORD dw;
 	VOLUME_DISK_EXTENTS vde;
 	if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
 		return GetLastError();
 	}
-	*lpQwSize = vde.Extents[0].ExtentLength.QuadPart;
+	*lpqwSize = vde.Extents[0].ExtentLength.QuadPart;
 	return NO_ERROR;
 }
 
@@ -150,4 +150,18 @@ void GetPhysicalDrives(bool* lpbAvailablesDrives, DWORD* lpdwErrors, DWORD dwSca
 		}
 
 	}
+}
+
+DWORD GetDrive(LPCSTR lpszVolume, LPDWORD lpdwDrive) {
+
+	HANDLE hVol = CreateFileA(lpszVolume, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, NULL, NULL);
+	if (hVol == INVALID_HANDLE_VALUE) {
+		return GetLastError();
+	}
+	VOLUME_DISK_EXTENTS vde;
+	DWORD dw;
+	if (!DeviceIoControl(hVol, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, 0, 0, &vde, sizeof vde, &dw, 0)) {
+		return GetLastError();
+	}
+	*lpdwDrive = vde.Extents[0].DiskNumber;
 }

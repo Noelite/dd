@@ -499,7 +499,7 @@ int main(int argc, char* argv[]) {
 		}
 	}
 
-	DWORD dwOutputFileDriveNumber;
+	DWORD dwOutputFileDriveNumber, dwSystemDrive;
 
 	memcpy(szBuffer, szOutputFile, 17);
 	ToLower(szBuffer);
@@ -509,21 +509,29 @@ int main(int argc, char* argv[]) {
 			Exit(EXIT_REASON_INVALID_ARGUMENT, 371);
 		}
 		bOfIsPhysicalDrive = true;
+
+	}
+
+	if (!GetDrive("\\\\.\\C:", &dwSystemDrive)) {
+		printf("Erreur lors de l'obtention du disque système: %lu\n", GetLastError());
+
+	}
+	else {
+		
 		char tmp[8];
 		strcpy(tmp, szOutputFile + 17);
 		dwOutputFileDriveNumber = atoi(tmp);
-		if (dwOutputFileDriveNumber == 0) {
+		if (dwOutputFileDriveNumber == dwSystemDrive) {
 			printf("Le disque sélectionné est le disque système.\nContinuer tout de même ? ");
 			char response[256];
 			scanf("%s", response);
 			ToLower(response);
 
 			if (!Equal(response, "oui")) {
-				Exit(EXIT_REASON_NO_REASON, 38);
+				Exit(EXIT_REASON_NO_REASON, 0);
 			}
 
 		}
-
 	}
 
 
