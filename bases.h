@@ -3,7 +3,7 @@
 #define BASES_H_INCLUDED
 
 #include <Windows.h>
-#include "..\..\..\..\Desktop\Mathis\Code\headers\utils.h"
+#include "utils.h"
 
 
 #define BIN 0
