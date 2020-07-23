@@ -1,7 +1,7 @@
 #pragma once
 #include <Windows.h>
 #include <stdio.h>
-#include "..\..\..\..\Desktop\Mathis\Code\headers\utils.h"
+#include "utils.h"
 
 bool LockDriveVolumes(DWORD dwDriveNumber, bool bDeleteVolumes, bool bQuiet = false);
 bool LockVolume(HANDLE hVolume, bool bDelete);
