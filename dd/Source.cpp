@@ -1,6 +1,6 @@
 #include <Windows.h>
-#include "diskutils.h"
-#include "bases.h"
+#include "..\..\..\..\Desktop\Mathis\Code\headers\diskutils.h"
+#include "..\..\..\..\Desktop\Mathis\Code\headers\bases.h"
 
 #define EXIT_REASON_NO_REASON 0U
 #define EXIT_REASON_INVALID_ARGUMENT 1U
@@ -12,7 +12,7 @@
 void Exit(DWORD dwExitReason, DWORD dwExitCode);
 bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 bool GetSizeAsString(QWORD qwSize, LPSTR lpDest);
-
+void GetErrorString(LPSTR lpszError);
 
 bool bDestHandleOpen = false, bSrcHandleOpen = false, bDebugMode = false;
 HANDLE hSrcFile = 0, hDestFile = 0;
@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
 			char szPhysicalDriveString[38] = "\\\\.\\PhysicalDrive";
 
 			puts("");
-			for (DWORD i = 0; i < 64; i++) {
+			for (DWORD i = 0; i < 1024; i++) {
 
 				_ultoa(i, szDriveNumber, 10);
 				strcpy(szPhysicalDriveString + 17, szDriveNumber);
@@ -400,7 +400,7 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		printf("argc = %d\nargv[%d] = %s\n", argc, i, argv[i]);
+		printf("Argument non reconnu \"%s\"\n", argv[i]);
 		Exit(EXIT_REASON_INVALID_ARGUMENT, 28);
 	}
 	
@@ -417,16 +417,6 @@ int main(int argc, char* argv[]) {
 	szBuffer[17] = 0;
 
 	if (bIfSet) {
-		char szInputFileTemp[PATH_BUFFER_SIZE];
-		char szOutputFileTemp[PATH_BUFFER_SIZE];
-		strcpy(szInputFileTemp, szInputFile);
-		strcpy(szOutputFileTemp, szOutputFile);
-		ToLower(szInputFileTemp);
-		ToLower(szOutputFileTemp);
-		if (Equal(szInputFileTemp, szOutputFileTemp)) {
-			puts("Les fichiers d'entrée et de sortie ne peuvent pas être les mêmes.");
-			Exit(EXIT_REASON_ERROR_OTHER, 30);
-		}
 
 		char volumeLetter = szInputFile[0];
 		if (szInputFile[1] == ':' && IsLetter(volumeLetter) && szInputFile[2] == 0) {
@@ -465,8 +455,9 @@ int main(int argc, char* argv[]) {
 		hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		bSrcHandleOpen = true;
 		if (hSrcFile == INVALID_HANDLE_VALUE) {
-			printf("Impossible d'ouvrir le fichier source. Code d'erreur : %lu\n", GetLastError());
-			Exit(EXIT_REASON_NO_REASON, 31);
+			GetErrorString(szInputFile);
+			printf("Impossible d'ouvrir le fichier source.\n%s", szInputFile);
+			Exit(EXIT_REASON_NO_REASON, 0);
 		}
 		
 		if (bSetIfPtr) {
@@ -475,7 +466,8 @@ int main(int argc, char* argv[]) {
 			}
 			li.QuadPart = qwIfSp;
 			if (!SetFilePointerEx(hSrcFile, li, 0, FILE_BEGIN)) {
-				printf("Impossible de déplacer le pointeur du fichier source: %lu\n", GetLastError());
+				GetErrorString(szInputFile);
+				printf("Impossible de déplacer le pointeur du fichier source.\n%s", szInputFile);
 				Exit(EXIT_REASON_NO_REASON, 33);
 			}
 		}
@@ -519,7 +511,8 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (!GetDrive("\\\\.\\C:", &dwSystemDrive)) {
-		printf("Erreur lors de l'obtention du disque système: %lu\n", GetLastError());
+		GetErrorString(szInputFile);
+		printf("Erreur lors de la détection du disque système.\n%s", szInputFile);
 
 	}
 	else {
@@ -550,14 +543,16 @@ int main(int argc, char* argv[]) {
 			CloseHandle(hDestFile);
 			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hDestFile == INVALID_HANDLE_VALUE) {
-				printf("Impossible de créer le fichier de destination. Code d'erreur : %lu\n", GetLastError());
-				Exit(EXIT_REASON_NO_REASON, 34);
+				GetErrorString(szInputFile);
+				printf("Impossible de créer le fichier de destination.\n%s", szInputFile);
+				Exit(EXIT_REASON_NO_REASON, 0);
 
 			}
 		}
 		else if (dwLastError != NO_ERROR) {
-			printf("Impossible d'ouvrir le fichier de destination. Code d'erreur : %lu\n", dwLastError);
-			Exit(EXIT_REASON_NO_REASON, 35);
+			GetErrorString(szInputFile);
+			printf("Impossible d'ouvrir le fichier de destination.\n%s", szInputFile);
+			Exit(EXIT_REASON_NO_REASON, 0);
 		
 
 		}
@@ -569,8 +564,9 @@ int main(int argc, char* argv[]) {
 		}
 		li.QuadPart = qwOfSp;
 		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
-			printf("Impossible de déplacer le pointeur du fichier de destination: %lu\n", GetLastError());
-			Exit(EXIT_REASON_NO_REASON, 37);
+			GetErrorString(szInputFile);
+			printf("Impossible de déplacer le pointeur du fichier de destination.\n%s", szInputFile);
+			Exit(EXIT_REASON_NO_REASON, 0);
 		}
 		
 	}
@@ -856,7 +852,10 @@ startOperation:
 end:
 	
 	if (ret != NO_ERROR) {
-		printf("Code d'erreur: %lu\n", ret);
+		if (!FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, ret, LANG_USER_DEFAULT, szInputFile, 261, NULL)) {
+			_ultoa(ret, szInputFile, 10);
+		}
+		printf("%s", szInputFile);
 		Exit(EXIT_REASON_NO_REASON, 0);
 	}
 
@@ -869,7 +868,8 @@ end:
 	if (bEndFile && !bOfIsVolume && !bOfIsPhysicalDrive) {
 		DWORD dwLastError;
 		if (dwLastError = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) {
-			printf("SetFileSizeEnd(%s) err: %lu\n", szOutputFile, dwLastError);
+			GetErrorString(szInputFile);
+			printf("SetFileSize(%s): %s", szOutputFile, szInputFile);
 		}
 	}
 
@@ -879,8 +879,10 @@ end:
 			bSrcHandleOpen = false;
 		}
 		
-		if (!DeleteFileA(szInputFile))
-			printf("DeleteFileA(%s) err: %lu\n", szInputFile, GetLastError());
+		if (!DeleteFileA(szInputFile)) {
+			GetErrorString(szInputFile);
+			printf("Erreur lors de la suppression du fichier source.\n%s", szInputFile);
+		}
 	}
 
 	if (bDeleteOf && !bOfIsVolume && !bOfIsPhysicalDrive) {
@@ -889,8 +891,10 @@ end:
 			bDestHandleOpen = false;
 		}
 
-		if (!DeleteFileA(szOutputFile))
-			printf("DeleteFileA(%s) err: %lu\n", szOutputFile, GetLastError());
+		if (!DeleteFileA(szOutputFile)) {
+			GetErrorString(szInputFile);
+			printf("Erreur lors de la suppression du fichier de destination.\n%s", szInputFile);
+		}
 	}
 	
 	Exit(EXIT_REASON_NO_REASON, 0);
@@ -938,6 +942,15 @@ bool GetSizeAsString(QWORD qwSize, LPSTR lpDest) {
 	strcpy(lpDest + len + 1, (qwSize > 10737418240) ? "Go" : (qwSize > 10485760 ? "Mo" : "Ko"));
 
 	return true;
+}
+
+void GetErrorString(LPSTR lpszError) {
+	DWORD dwError = GetLastError();
+	DWORD dwMessageLength = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, LANG_USER_DEFAULT, lpszError, 261, NULL);
+	if (!dwMessageLength) {
+		_ultoa(dwError, lpszError, 10);
+	}
+	return;
 }
 
 void Exit(DWORD dwExitReason, DWORD dwExitCode) {
