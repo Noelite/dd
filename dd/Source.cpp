@@ -1,6 +1,6 @@
 #include <Windows.h>
-#include "..\..\..\..\Desktop\Mathis\Code\headers\diskutils.h"
-#include "..\..\..\..\Desktop\Mathis\Code\headers\bases.h"
+#include "diskutils.h"
+#include "bases.h"
 
 #define EXIT_REASON_NO_REASON 0U
 #define EXIT_REASON_INVALID_ARGUMENT 1U
@@ -12,7 +12,6 @@
 void Exit(DWORD dwExitReason, DWORD dwExitCode);
 bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 bool GetSizeAsString(QWORD qwSize, LPSTR lpDest);
-void GetErrorString(LPSTR lpszError);
 
 bool bDestHandleOpen = false, bSrcHandleOpen = false, bDebugMode = false;
 HANDLE hSrcFile = 0, hDestFile = 0;
@@ -54,14 +53,15 @@ int main(int argc, char* argv[]) {
 			HANDLE hVolume = 0, hVolumeSearch = 0;
 			char szVolumeGUID[49];
 			char szVolumeGUIDRoot[50];
-			char szVolumeName[MAX_PATH];
-			char szVolumeFS[MAX_PATH];
+			char szVolumeName[PATH_BUFFER_SIZE];
+			char szVolumeFS[PATH_BUFFER_SIZE];
 			szVolumeGUID[48] = 0;
 			
 
 			puts("");
 			if (!(hVolumeSearch = FindFirstVolumeA(szVolumeGUIDRoot, sizeof szVolumeGUIDRoot))) {
-				printf("Impossible de trouver le premier volume. %lu\n", GetLastError());
+				GetErrorString(szVolumeName);
+				printf("FindFirstVolumeA(%s) failed.\n%s", szVolumeGUIDRoot, szVolumeName);
 				Exit(EXIT_REASON_ERROR_OTHER, 2);
 			}
 			goto inLoop;
@@ -74,10 +74,10 @@ int main(int argc, char* argv[]) {
 
 				hVolume = CreateFileA(szVolumeGUID, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, NULL, NULL);
 				if (hVolume == INVALID_HANDLE_VALUE) {
-					DWORD dwLastError = GetLastError();
-					if (dwLastError == ERROR_FILE_NOT_FOUND)
+					if (GetLastError() == ERROR_FILE_NOT_FOUND)
 						continue;
-					printf("CreateFile(%s) err: %lu\n\n", szVolumeGUID, dwLastError);
+					GetErrorString(szVolumeName);
+					printf("CreateFile(%s) failed.\n%s", szVolumeGUID, szVolumeName);
 					CloseHandle(hVolume);
 					continue;
 				}
@@ -85,7 +85,8 @@ int main(int argc, char* argv[]) {
 				if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, NULL, &vde, sizeof vde, &dw, NULL)) {
 					DWORD dwError = GetLastError();
 					if ((dwDriveType != DRIVE_CDROM && dwError != ERROR_INVALID_FUNCTION) && dwError != ERROR_MORE_DATA) {	// Si le disque est un CDROM vide ou un RAID sur plusieurs disques
-						printf("DeviceIoControl err %lu\n\n", dwError);
+						GetErrorString(szVolumeName);
+						printf("DeviceIoControl(IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS) failed.\n%s", szVolumeName);
 					}
 					CloseHandle(hVolume);
 					continue;
@@ -101,29 +102,29 @@ int main(int argc, char* argv[]) {
 				printf("Volume %lu  %s\n", volumesCount, szVolumeGUID);
 
 				if (driveNumber[drivesCount] != -1 && bGetVolEx)
-					printf("Disque: %lu\n", driveNumber[drivesCount]);
+					printf("Disk: %lu\n", driveNumber[drivesCount]);
 				
 				qwVolSize = vde.Extents[0].ExtentLength.QuadPart;
 				qwVolOffset = vde.Extents[0].StartingOffset.QuadPart;
 				if (qwVolSize == 0)
-					puts("Aucun média");
+					puts("No media");
 				else {
 					char szSizeString[20];
 					GetSizeAsString(qwVolSize, szSizeString);
 					
 					if (bGetVolEx) {
 
-						printf("Taille: %llu (%s)\n", qwVolSize, szSizeString);
+						printf("Size: %llu (%s)\n", qwVolSize, szSizeString);
 						if (bGetVolEx && (qwVolOffset != 0 || driveNumber[drivesCount] != -1)) {
 							char szOffsetString[20];
 							GetSizeAsString(qwVolOffset, szOffsetString);
 							printf("Offset: %llu (%s)\n", qwVolOffset, szOffsetString);
 						}
 					}
-					else printf("Taille: %s\n", szSizeString);
+					else printf("Size: %s\n", szSizeString);
 				}
 
-				printf("Système de fichiers: %s\n", *szVolumeFS == 0 ? "RAW" : szVolumeFS);
+				printf("File system: %s\n", *szVolumeFS == 0 ? "RAW" : szVolumeFS);
 
 				
 					
@@ -132,41 +133,41 @@ int main(int argc, char* argv[]) {
 
 					switch (dwDriveType) {
 					case DRIVE_UNKNOWN: {
-						puts("Inconnu");
+						puts("Unknown");
 						break;
 					}
 					case DRIVE_NO_ROOT_DIR: {
-						puts("Mauvais volume");
+						puts("Bad volume");
 						break;
 					}
 					case DRIVE_REMOVABLE: {
-						puts("Stockage amovible");
+						puts("Removable storage");
 						break;
 					}
 					case DRIVE_FIXED: {
-						puts(driveNumber[drivesCount] != -1 ? "Stockage fixe" : "Volume RAM Virtuel");
+						puts(driveNumber[drivesCount] != -1 ? "Fixed storage" : "RAM Disk");
 						break;
 					}
 					case DRIVE_REMOTE: {
-						puts("Stockage réseau");
+						puts("Network storage");
 						break;
 					}
 					case DRIVE_CDROM: {
-						puts("Lecteur de CDROM");
+						puts("CDROM reader");
 						break;
 					}
 					case DRIVE_RAMDISK: {
-						puts("Volume RAM Virtuel");
+						puts("RAM Disk");
 						break;
 					}
 					default: {
-						printf("%llu\n", dwDriveType);
+						printf("dwDriveType: %lu\n", dwDriveType);
 					}
 					}
 				}
 
 				if (*szVolumeName != 0)
-					printf("Nom: %s\n", szVolumeName);
+					printf("Name: %s\n", szVolumeName);
 
 				puts("");
 
@@ -202,12 +203,12 @@ int main(int argc, char* argv[]) {
 
 				}
 			goodDrive:
-				printf("Disque %lu", i);
+				printf("Disk %lu", i);
 				QWORD qwDriveSize = 0;
 				if (GetDriveSize(hDrive, &qwDriveSize) == NO_ERROR) {
 					printf("   %lu %s",
 						(qwDriveSize > 10737418240) ? (qwDriveSize / 1073741824) : (qwDriveSize > 10485760 ? qwDriveSize / 1048576 : qwDriveSize / 1024),
-						(qwDriveSize > 10737418240) ? "Go" : (qwDriveSize > 10485760 ? "Mo" : "Ko"));
+						(qwDriveSize > 10737418240) ? "Gb" : (qwDriveSize > 10485760 ? "Mb" : "Kb"));
 				}
 				puts("");
 			}
@@ -245,7 +246,7 @@ int main(int argc, char* argv[]) {
 	
 	bool bIfSet = false, bOfSet = false, bSizeSet = false, bBsSet = false, bDataSet = false, bIfIsPhysicalDrive = false,
 		bOfIsPhysicalDrive = false, bDeleteIf = false, bDeleteOf = false, bSetFileSize = false, bEndFile = false,
-		bDeleteVolumes = false, bSetIfPtr = false, bSetOfPtr = false, bPrealloc = false;
+		bDeleteVolumes = false, bSetIfPtr = false, bSetOfPtr = false, bPrealloc = false, bSetOfPtrEnd = false;
 	
 	
 	for (int i = 1; i < argc; i++) {		// Boucle principale pour parser la ligne de commande
@@ -300,7 +301,7 @@ int main(int argc, char* argv[]) {
 			}
 
 			if (Remainder(qwBufferSize, 512) != 0) {
-				puts("La taille du buffer doit être un multiple de la taille d'un secteur (512).");
+				puts("Buffer size must be a multiple of the sector size (512 bytes).");
 				Exit(EXIT_REASON_ERROR_OTHER, 13);
 			}
 			bBsSet = true;
@@ -335,7 +336,10 @@ int main(int argc, char* argv[]) {
 				Exit(EXIT_REASON_TOO_MUCH_ARGUMENTS, 18);
 
 			if (!StrToQword(argv[i] + 5, &qwOfSp)) {
-				Exit(EXIT_REASON_INVALID_ARGUMENT, 19);
+				if (!Equal(szCmdLineTempBuffer + 5, "app")) {
+					Exit(EXIT_REASON_INVALID_ARGUMENT, 19);
+				}
+				bSetOfPtrEnd = true;
 			}
 			bSetOfPtr = true;
 			continue;
@@ -400,16 +404,12 @@ int main(int argc, char* argv[]) {
 			continue;
 		}
 
-		printf("Argument non reconnu \"%s\"\n", argv[i]);
+		printf("Unknown argument \"%s\"\n", argv[i]);
 		Exit(EXIT_REASON_INVALID_ARGUMENT, 28);
 	}
 	
 	if (!bOfSet) {
 		Exit(EXIT_REASON_NOT_ENOUGH_ARGUMENTS, 29);
-	}
-	for (WORD i = 0; i < sizeof szInputFile; i++) {
-		if (szInputFile[i] == '/') szInputFile[i] = '\\';
-		if (szOutputFile[i] == '/') szOutputFile[i] = '\\';
 	}
 
 	LARGE_INTEGER li;
@@ -444,7 +444,7 @@ int main(int argc, char* argv[]) {
 		ToLower(szBuffer);
 		if (Equal(szBuffer, "\\\\.\\physicaldrive") || Equal(szBuffer, "\\\\?\\physicaldrive")) {
 			if (!IsDecimalString(szInputFile + 17)) {
-				puts("Le disque source n'est pas valide.");
+				puts("Source disk is invalid.");
 				Exit(EXIT_REASON_INVALID_ARGUMENT, 381);
 			}
 			bIfIsPhysicalDrive = true;
@@ -456,7 +456,7 @@ int main(int argc, char* argv[]) {
 		bSrcHandleOpen = true;
 		if (hSrcFile == INVALID_HANDLE_VALUE) {
 			GetErrorString(szInputFile);
-			printf("Impossible d'ouvrir le fichier source.\n%s", szInputFile);
+			printf("Error opening source file.\n%s", szInputFile);
 			Exit(EXIT_REASON_NO_REASON, 0);
 		}
 		
@@ -467,7 +467,7 @@ int main(int argc, char* argv[]) {
 			li.QuadPart = qwIfSp;
 			if (!SetFilePointerEx(hSrcFile, li, 0, FILE_BEGIN)) {
 				GetErrorString(szInputFile);
-				printf("Impossible de déplacer le pointeur du fichier source.\n%s", szInputFile);
+				printf("SetFilePointerEx(hSrcFile, %llu).\n%s", li.QuadPart, szInputFile);
 				Exit(EXIT_REASON_NO_REASON, 33);
 			}
 		}
@@ -503,35 +503,40 @@ int main(int argc, char* argv[]) {
 	ToLower(szBuffer);
 	if (Equal(szBuffer, "\\\\.\\physicaldrive") || Equal(szBuffer, "\\\\?\\physicaldrive")) {
 		if (!IsDecimalString(szOutputFile + 17)) {
-			puts("Le disque de destination n'est pas valide.");
+			puts("Destination disk is invalid.");
 			Exit(EXIT_REASON_INVALID_ARGUMENT, 371);
 		}
 		bOfIsPhysicalDrive = true;
 
-	}
-
-	if (!GetDrive("\\\\.\\C:", &dwSystemDrive)) {
-		GetErrorString(szInputFile);
-		printf("Erreur lors de la détection du disque système.\n%s", szInputFile);
-
-	}
-	else {
-		
-		char tmp[8];
-		strcpy(tmp, szOutputFile + 17);
-		dwOutputFileDriveNumber = atoi(tmp);
-		if (dwOutputFileDriveNumber == dwSystemDrive) {
-			printf("Le disque sélectionné est le disque système.\nContinuer tout de même ? ");
-			char response[256];
-			scanf("%s", response);
-			ToLower(response);
-
-			if (!Equal(response, "oui")) {
-				Exit(EXIT_REASON_NO_REASON, 0);
-			}
+		if (!GetDrive("\\\\.\\C:", &dwSystemDrive)) {
+			GetErrorString(szInputFile);
+			printf("Error detecting system drive.\n%s", szInputFile);
 
 		}
+		else if (IsDecimalString(szOutputFile + 17)) {
+
+			char tmp[10];
+			strcpy(tmp, szOutputFile + 17);
+			dwOutputFileDriveNumber = strtoul(tmp, NULL, 10);
+			if (dwOutputFileDriveNumber == dwSystemDrive) {
+			a:
+
+				printf("Le disque sélectionné est le disque système.\nStill continue ? [y/n] ");
+				char response;
+				scanf("%c", &response);
+
+				if (response == 'n' || response == 'N') {
+					Exit(EXIT_REASON_NO_REASON, 0);
+				}
+				else if (response != 'y' || response != 'Y') {
+					goto a;
+				}
+
+			}
+		}
 	}
+
+
 
 
 	
@@ -544,36 +549,25 @@ int main(int argc, char* argv[]) {
 			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hDestFile == INVALID_HANDLE_VALUE) {
 				GetErrorString(szInputFile);
-				printf("Impossible de créer le fichier de destination.\n%s", szInputFile);
+				printf("Error creating output file.\n%s", szInputFile);
 				Exit(EXIT_REASON_NO_REASON, 0);
 
 			}
 		}
 		else if (dwLastError != NO_ERROR) {
 			GetErrorString(szInputFile);
-			printf("Impossible d'ouvrir le fichier de destination.\n%s", szInputFile);
+			printf("Error opening output file.\n%s", szInputFile);
 			Exit(EXIT_REASON_NO_REASON, 0);
 		
 
 		}
 	}
 
-	if (bSetOfPtr) {
-		if (qwOfSp == 0) {
-			Exit(EXIT_REASON_INVALID_ARGUMENT, 36);
-		}
-		li.QuadPart = qwOfSp;
-		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
-			GetErrorString(szInputFile);
-			printf("Impossible de déplacer le pointeur du fichier de destination.\n%s", szInputFile);
-			Exit(EXIT_REASON_NO_REASON, 0);
-		}
-		
-	}
+
 	
 	DWORD ret;
 
-	const char szPtrPosError[] = "La position du pointeur de fichier doit être un multiple de 512 sur les disques/volumes.";
+	const char szPtrPosError[] = "File pointer must be a multiple of 512 bytes on disks/volumes.";
 	if ((bOfIsPhysicalDrive || bOfIsVolume) && bSetOfPtr) {
 		if (Remainder(qwOfSp, 512) != 0) {
 			puts(szPtrPosError);
@@ -588,7 +582,7 @@ int main(int argc, char* argv[]) {
 	}
 	
 	QWORD qwDestSize = 0, qwSrcSize = 0;
-	if (!bSizeSet) {
+	if (!bSizeSet || bSetOfPtrEnd) {
 		if (bIfIsPhysicalDrive) {
 			GetDriveSize(hSrcFile, &qwSrcSize);
 			if (bDebugMode)
@@ -626,7 +620,12 @@ int main(int argc, char* argv[]) {
 
 		if (bSetOfPtr)
 			qwDestSize = qwDestSize - qwOfSp;
+
+		if (bSetOfPtrEnd)
+			qwOfSp = qwDestSize;
+
 	}
+
 
 	
 	if (!bIfSet && !bDataSet) {
@@ -678,20 +677,40 @@ int main(int argc, char* argv[]) {
 
 startOperation:
 
+	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
 	if (bPrealloc && !bOfIsPhysicalDrive && !bOfIsVolume && !bSetFileSize) {
 		if ((ret = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) != NO_ERROR) {
-			printf("Impossible de préallouer la taille du fichier: %lu\n", ret);
+			printf("[1] SetFileSize(hDestFile, %llu) failed.\n", qwWriteSize + qwOfSp);
 			Exit(EXIT_REASON_ERROR_OTHER, 43);
 		}
 		li.QuadPart = 0;
-		SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN);
+		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
+			printf("[2] SetFilePointerEx(hDestFile, %llu) failed.\n", li.QuadPart);
+			goto end;
+		}
 	}
 
-	HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+	if (bSetOfPtr) {
+		if (qwOfSp == 0 && !bSetOfPtrEnd) {
+			Exit(EXIT_REASON_INVALID_ARGUMENT, 36);
+		}
+		li.QuadPart = qwOfSp;
+		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
+			GetErrorString(szInputFile);
+			printf("[1] SetFilePointerEx(hDestFile, %llu) failed.\n%s", li.QuadPart, szInputFile);
+			Exit(EXIT_REASON_NO_REASON, 0);
+		}
+	}
+
 	COORD coord;
 
 	if (bSetFileSize && !bIfSet) {
-		ret = SetFileSize(hDestFile, qwWriteSize + qwOfSp);
+		if ((ret = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) != NO_ERROR) {
+			printf("[2] SetFileSize(hDestFile, %llu) failed.\n", qwWriteSize + qwOfSp);
+			goto end;
+		}
+		
 	}
 	else {
 
@@ -701,12 +720,38 @@ startOperation:
 		char szProgress[3] = { 0, 0, 0 };
 		byte currentProgress = 0, oldProgress = 0;
 		QWORD qwRemainderSize = qwWriteSize < 512 ? qwWriteSize : Remainder(qwWriteSize, qwBufferSize);
-		QWORD qwPasses = qwWriteSize < 512 ? 0 : qwWriteSize / qwBufferSize;
+		QWORD qwWrites = qwWriteSize < 512 ? 0 : qwWriteSize / qwBufferSize;
 		LPBYTE lpBuffer = (LPBYTE)malloc(qwBufferSize);
 		if (lpBuffer == NULL) {
-			puts("Impossible d'allouer la mémoire pour la copie.");
+			printf("malloc (%llu) failed for r/w buffer.", qwBufferSize);
 			Exit(EXIT_REASON_PREVENT_CRASH, 431);
 		}
+
+		char szPercent[4] = { 0,0,0 };
+		char szTotalSizeString[11], szCurrentSizeString[11];
+		COORD coord = { 0,0 };
+		COORD coord_percent = { 0,0 };
+		CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
+		GetConsoleScreenBufferInfo(hConsole, &consoleScreenInfo);
+		coord.Y = consoleScreenInfo.dwCursorPosition.Y;
+		byte totalSizeTextLength;
+
+
+		QWORD qwSizeDivisor = (qwWriteSize >= 107374182400) ? 1073741824 : (qwWriteSize >= 104857600) ? 1048576 : 1024;
+
+		_ui64toa(qwWriteSize / qwSizeDivisor, szTotalSizeString, 10);
+		DWORD len = strlen(szTotalSizeString);
+		szTotalSizeString[len] = ' ';
+		strcpy(szTotalSizeString + len + 1, (qwWriteSize >= 107374182400) ? "Gb" : (qwWriteSize >= 104857600) ? "Mb" : "Kb");
+
+		totalSizeTextLength = strlen(szTotalSizeString);
+		ZeroMemory(szCurrentSizeString, totalSizeTextLength);
+		printf("%.*s%s/%s (   %%)\n", totalSizeTextLength - 2, "           ", (qwWriteSize >= 107374182400) ? "Gb" : (qwWriteSize >= 104857600) ? "Mb" : "Kb", szTotalSizeString);
+		coord_percent.X = coord.X + totalSizeTextLength * 2 + 3;
+		coord_percent.Y = coord.Y;
+		
+
+		byte percent = 0xFF;
 
 		DWORD dwSectorWriteSize = Remainder(qwRemainderSize, 512);
 		WORD wInSectorMiddleOffset = (qwRemainderSize >= 512) ? (512 - dwSectorWriteSize) : 512 - qwRemainderSize;
@@ -722,39 +767,36 @@ startOperation:
 
 		}
 
-		CONSOLE_SCREEN_BUFFER_INFO consoleScreenInfo;
-		GetConsoleScreenBufferInfo(hConsole, &consoleScreenInfo);
-		coord = consoleScreenInfo.dwCursorPosition;
-		coord.X = 0;
-
-		puts("");
+		//puts("");
 		if (coord.Y >= consoleScreenInfo.dwSize.Y - 1)
 			coord.Y--;
-		
-		WriteConsoleOutputCharacterA(hConsole, "0 %", 3, coord, &ret);
+
 		
 
 		if (bIfSet) {
 
-			for (QWORD i = 0; i < qwPasses; i++) {
+			for (QWORD i = 0; i < qwWrites; i++) {
 				if (!ReadFile(hSrcFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-					puts("Erreur de lecture!");
+					puts("[1] Read error!");
 					ret = GetLastError();
 					goto end;
 				}
 
 				if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-					puts("Erreur d'écriture!");
+					puts("[1] Write error!");
 					ret = GetLastError();
 					goto end;
 				}
-				currentProgress = i * 100 / qwPasses;
-				if (currentProgress != oldProgress) {
-					oldProgress = currentProgress;
-					_itoa(currentProgress, szProgress, 10);
-					WriteConsoleOutputCharacterA(hConsole, szProgress, 2, coord, &ret);
-				}
 
+				_ultoa(((i + 1) * qwBufferSize) / qwSizeDivisor, szCurrentSizeString, 10);
+				WriteConsoleOutputCharacterA(hConsole, szCurrentSizeString, totalSizeTextLength - 3, coord, &ret);
+
+				register byte reg_percent_temp = (i + 1) * 100 / qwWrites;
+				if (percent != reg_percent_temp) {	// Écrit le pourcentage de progression seulement s'il à changé (performances)
+					percent = reg_percent_temp;
+					_ultoa(reg_percent_temp, szPercent, 10);
+					WriteConsoleOutputCharacterA(hConsole, szPercent, 3, coord_percent, &ret);
+				}
 
 			}
 			if (qwRemainderSize == 0) {
@@ -764,7 +806,7 @@ startOperation:
 
 			
 			if (!ReadFile(hSrcFile, lpBuffer, bInSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-				puts("Erreur de lecture!");
+				puts("[2] Read error!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -776,7 +818,7 @@ startOperation:
 				SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN);
 
 				if (!ReadFile(hDestFile, sectorDataTemp, 512, &ret, NULL)) {
-					puts("Erreur de lecture sur le disque de destination!");
+					puts("[3] Read error!");
 					ret = GetLastError();
 					goto end;
 				}
@@ -787,7 +829,7 @@ startOperation:
 			}
 
 			if (!WriteFile(hDestFile, lpBuffer, bOutSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-				puts("Erreur d'écriture!");
+				puts("[2] Write error!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -799,19 +841,23 @@ startOperation:
 
 		memset(lpBuffer, data, qwBufferSize);
 
-		for (QWORD i = 0; i < qwPasses; i++) {
+		for (QWORD i = 0; i < qwWrites; i++) {
 			if (!WriteFile(hDestFile, lpBuffer, qwBufferSize, &ret, NULL)) {
-				puts("Erreur d'écriture!");
+				puts("[3] Write error!");
 				ret = GetLastError();
 				goto end;
 			}
 
-			currentProgress = i * 100 / qwPasses;
-			if (currentProgress != oldProgress) {
-				oldProgress = currentProgress;
-				_itoa(currentProgress, szProgress, 10);
-				WriteConsoleOutputCharacterA(hConsole, szProgress, 2, coord, &ret);
+			_ultoa(((i + 1) * qwBufferSize) / qwSizeDivisor, szCurrentSizeString, 10);
+			WriteConsoleOutputCharacterA(hConsole, szCurrentSizeString, totalSizeTextLength - 3, coord, &ret);
+
+			register byte reg_percent_temp = (i + 1) * 100 / qwWrites;
+			if (percent != reg_percent_temp) {	// Écrit le pourcentage de progression seulement s'il à changé (performances)
+				percent = reg_percent_temp;
+				_ultoa(reg_percent_temp, szPercent, 10);
+				WriteConsoleOutputCharacterA(hConsole, szPercent, 3, coord_percent, &ret);
 			}
+
 		}
 		if (qwRemainderSize == 0) {
 			ret = NO_ERROR;
@@ -825,7 +871,7 @@ startOperation:
 			SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN);
 
 			if (!ReadFile(hDestFile, sectorDataTemp, 512, &ret, NULL)) {
-				puts("Erreur de lecture sur le disque de destination!");
+				puts("[4] Read error!");
 				ret = GetLastError();
 				goto end;
 			}
@@ -836,7 +882,7 @@ startOperation:
 		}
 
 		if (!WriteFile(hDestFile, lpBuffer, bOutSizeMiddleSector ? qwRemainderSize + wInSectorMiddleOffset : qwRemainderSize, &ret, NULL)) {
-			puts("Erreur d'écriture!");
+			puts("[4] Write error!");
 			ret = GetLastError();
 			goto end;
 		}
@@ -859,17 +905,13 @@ end:
 		Exit(EXIT_REASON_NO_REASON, 0);
 	}
 
-	if (!bSetFileSize) {
-		
-		WriteConsoleOutputCharacterA(hConsole, "100%", 4, coord, &ret);
-	}
 
 	
 	if (bEndFile && !bOfIsVolume && !bOfIsPhysicalDrive) {
 		DWORD dwLastError;
 		if (dwLastError = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) {
 			GetErrorString(szInputFile);
-			printf("SetFileSize(%s): %s", szOutputFile, szInputFile);
+			printf("[3] SetFileSize(hDestFile, %llu) failed.\n%s", qwWriteSize + qwOfSp, szInputFile);
 		}
 	}
 
@@ -881,7 +923,7 @@ end:
 		
 		if (!DeleteFileA(szInputFile)) {
 			GetErrorString(szInputFile);
-			printf("Erreur lors de la suppression du fichier source.\n%s", szInputFile);
+			printf("Error deleting source file.\n%s", szInputFile);
 		}
 	}
 
@@ -893,7 +935,7 @@ end:
 
 		if (!DeleteFileA(szOutputFile)) {
 			GetErrorString(szInputFile);
-			printf("Erreur lors de la suppression du fichier de destination.\n%s", szInputFile);
+			printf("Error deleting output file.\n%s", szInputFile);
 		}
 	}
 	
@@ -901,9 +943,9 @@ end:
 }
 
 bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
-	const char suffix[] = { 's', 'k', 'm', 'g' }; // (s)ector, (k)ilobyte...
+	const char suffix[] = { 's', 'k', 'm', 'g', 't' }; // (s)ector, (k)ilobyte...
 	
-	const QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824 };
+	const QWORD qwSuffixSize[] = { 512, 1024, 1048576, 1073741824, 1099511627776 };
 	DWORD dwStrLength = 0;
 	byte lastDecimal = 0;
 	while (lpStr[dwStrLength] != 0) {
@@ -936,21 +978,12 @@ bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest) {
 
 bool GetSizeAsString(QWORD qwSize, LPSTR lpDest) {
 
-	_ui64toa((qwSize > 10737418240) ? (qwSize / 1073741824) : (qwSize > 10485760 ? qwSize / 1048576 : qwSize / 1024), lpDest, 10);
+	_ui64toa((qwSize > 10737418240) ? (qwSize / 1073741824) : (qwSize > 10485760) ?(qwSize / 1048576) : (qwSize / 1024), lpDest, 10);
 	DWORD len = strlen(lpDest);
 	lpDest[len] = ' ';
-	strcpy(lpDest + len + 1, (qwSize > 10737418240) ? "Go" : (qwSize > 10485760 ? "Mo" : "Ko"));
+	strcpy(lpDest + len + 1, (qwSize > 10737418240) ? "Gb" : (qwSize > 10485760) ? "Mb" : "Kb");
 
 	return true;
-}
-
-void GetErrorString(LPSTR lpszError) {
-	DWORD dwError = GetLastError();
-	DWORD dwMessageLength = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, LANG_USER_DEFAULT, lpszError, 261, NULL);
-	if (!dwMessageLength) {
-		_ultoa(dwError, lpszError, 10);
-	}
-	return;
 }
 
 void Exit(DWORD dwExitReason, DWORD dwExitCode) {
@@ -960,10 +993,11 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode) {
 		if (!CloseHandle(hSrcFile)) {
 			printf(" GetLastError(): %lu\n", GetLastError());
 		}
+		
 	}
 	
 	if (bDestHandleOpen) {
-		if (bDebugMode) printf("CloseHandle(hDestFile)...");
+		if (bDebugMode) printf("\nCloseHandle(hDestFile)...");
 		if (!CloseHandle(hDestFile)) {
 			printf(" GetLastError(): %lu\n", GetLastError());
 		}
@@ -977,23 +1011,23 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode) {
 
 	}
 	case EXIT_REASON_INVALID_ARGUMENT: {
-		puts("\nArgument invalide.");
+		puts("\nInvalid argument.");
 		goto exit;
 	}
 	case EXIT_REASON_PREVENT_CRASH: {
-		puts("\nErreur d'application.");
+		puts("\nApplication error.");
 		goto exit;
 	}
 	case EXIT_REASON_NOT_ENOUGH_ARGUMENTS: {
-		puts("\nPas assez d'arguments spécifiés.");
+		puts("\nNot enouth arguments.");
 		goto exit;
 	}
 	case EXIT_REASON_ERROR_OTHER: {
-		puts("\nUne erreur s'est produite.");
+		puts("\nAn error occured.");
 		goto exit;
 	}
 	case EXIT_REASON_TOO_MUCH_ARGUMENTS: {
-		puts("\nTrop d'arguments spécifiés.");
+		puts("\nToo much arguments.");
 		goto exit;
 	}
 	default:
@@ -1002,6 +1036,6 @@ void Exit(DWORD dwExitReason, DWORD dwExitCode) {
 
 exit:
 	if (dwExitCode) 
-		printf("Code d'arrêt: %lu\n", dwExitCode);
+		printf("Stop code: %lu\n", dwExitCode);
 	ExitProcess(dwExitCode);
 }

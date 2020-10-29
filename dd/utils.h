@@ -1,9 +1,8 @@
 #pragma once
 
-#include <string>
+#include <string.h>
 #include <Windows.h>
-#include <fstream>
-#include <iostream>
+#include <stdio.h>
 #include "stringUtils.h"
 
 typedef unsigned long long QWORD;
@@ -25,3 +24,5 @@ void ShowLastError(LPCSTR lpCaption);
 
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize);
 QWORD GetFilePointer(HANDLE hFile);
+
+void GetErrorString(LPSTR lpszError);

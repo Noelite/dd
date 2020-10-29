@@ -53,12 +53,9 @@ bool IsPathValid(LPCSTR lpPath) {
 }
 
 void ShowLastError(LPCSTR lpCaption) {
-	char errString[10] = "0x";
-	_ultoa(GetLastError(), errString + 2, 16);
-	ToUpper(errString + 2);
-	char lpFullMessage[54] = "Une erreur s'est produite.\nCode d'erreur : ";
-	strcat(lpFullMessage, errString);
-	MessageBoxA(NULL, lpFullMessage, lpCaption, MB_OK | MB_ICONERROR);
+	char szFullMessage[256];
+	GetErrorString(szFullMessage);
+	MessageBoxA(NULL, szFullMessage, lpCaption, MB_OK | MB_ICONERROR);
 }
 
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize) {
@@ -77,4 +74,12 @@ QWORD GetFilePointer(HANDLE hFile) {
 	LARGE_INTEGER li, _li = { 0 };
 	SetFilePointerEx(hFile, _li, &li, FILE_CURRENT);
 	return li.QuadPart;
+}
+
+void GetErrorString(LPSTR lpszError) {
+	DWORD dwError = GetLastError();
+	DWORD dwMessageLength = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, LANG_USER_DEFAULT, lpszError, 261, NULL);
+	if (dwMessageLength == 0) {
+		_ultoa(dwError, lpszError, 10);
+	}
 }

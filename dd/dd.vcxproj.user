@@ -4,7 +4,7 @@
     <LocalDebuggerCommand>$(TargetPath)</LocalDebuggerCommand>
     <LocalDebuggerWorkingDirectory>Z:\</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerCommandArguments>if=a\sd of=\\.\physicaldrive4 size=1M</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>of=G:\test.bin  bs=256K size=30k endfile prealloc ofsp=1s data=48 debug</LocalDebuggerCommandArguments>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerWorkingDirectory>Z:\</LocalDebuggerWorkingDirectory>
