@@ -54,7 +54,7 @@ bool IsPathValid(LPCSTR lpPath) {
 
 void ShowLastError(LPCSTR lpCaption) {
 	char szFullMessage[256];
-	GetErrorString(szFullMessage);
+	GetErrorString(szFullMessage, sizeof szFullMessage);
 	MessageBoxA(NULL, szFullMessage, lpCaption, MB_OK | MB_ICONERROR);
 }
 
@@ -76,10 +76,11 @@ QWORD GetFilePointer(HANDLE hFile) {
 	return li.QuadPart;
 }
 
-void GetErrorString(LPSTR lpszError) {
+void GetErrorString(LPSTR lpszError, DWORD dwBufferLength) {
 	DWORD dwError = GetLastError();
-	DWORD dwMessageLength = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, LANG_USER_DEFAULT, lpszError, 261, NULL);
+	DWORD dwMessageLength = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, dwError, LANG_USER_DEFAULT, lpszError, dwBufferLength, NULL);
 	if (dwMessageLength == 0) {
 		_ultoa(dwError, lpszError, 10);
+		strcat(lpszError, "\n");
 	}
 }

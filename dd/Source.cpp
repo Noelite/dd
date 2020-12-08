@@ -1,6 +1,6 @@
 #include <Windows.h>
-#include "diskutils.h"
-#include "bases.h"
+#include "..\..\..\..\Desktop\Mathis\Code\headers\diskutils.h"
+#include "..\..\..\..\Desktop\Mathis\Code\headers\bases.h"
 
 #define EXIT_REASON_NO_REASON 0U
 #define EXIT_REASON_INVALID_ARGUMENT 1U
@@ -9,6 +9,7 @@
 #define EXIT_REASON_ERROR_OTHER 4U
 #define EXIT_REASON_TOO_MUCH_ARGUMENTS 5U
 
+void PrintHelp(char* lpProgramName);
 void Exit(DWORD dwExitReason, DWORD dwExitCode);
 bool StrToQword(LPCSTR lpStr, QWORD* lpQwDest);
 bool GetSizeAsString(QWORD qwSize, LPSTR lpDest);
@@ -32,6 +33,9 @@ int main(int argc, char* argv[]) {
 		if (Equal(szBuffer, "version")) {
 			puts(__DATE__);
 			Exit(EXIT_REASON_NO_REASON, 0);
+		}
+		else if (Equal(szBuffer, "help")) {
+			PrintHelp(argv[0]);
 		}
 
 		if (Equal(szBuffer, "getvol", 6)) {
@@ -60,7 +64,7 @@ int main(int argc, char* argv[]) {
 
 			puts("");
 			if (!(hVolumeSearch = FindFirstVolumeA(szVolumeGUIDRoot, sizeof szVolumeGUIDRoot))) {
-				GetErrorString(szVolumeName);
+				GetErrorString(szVolumeName, sizeof szVolumeName);
 				printf("FindFirstVolumeA(%s) failed.\n%s", szVolumeGUIDRoot, szVolumeName);
 				Exit(EXIT_REASON_ERROR_OTHER, 2);
 			}
@@ -76,7 +80,7 @@ int main(int argc, char* argv[]) {
 				if (hVolume == INVALID_HANDLE_VALUE) {
 					if (GetLastError() == ERROR_FILE_NOT_FOUND)
 						continue;
-					GetErrorString(szVolumeName);
+					GetErrorString(szVolumeName, sizeof szVolumeName);
 					printf("CreateFile(%s) failed.\n%s", szVolumeGUID, szVolumeName);
 					CloseHandle(hVolume);
 					continue;
@@ -85,7 +89,7 @@ int main(int argc, char* argv[]) {
 				if (!DeviceIoControl(hVolume, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, NULL, &vde, sizeof vde, &dw, NULL)) {
 					DWORD dwError = GetLastError();
 					if ((dwDriveType != DRIVE_CDROM && dwError != ERROR_INVALID_FUNCTION) && dwError != ERROR_MORE_DATA) {	// Si le disque est un CDROM vide ou un RAID sur plusieurs disques
-						GetErrorString(szVolumeName);
+						GetErrorString(szVolumeName, sizeof szVolumeName);
 						printf("DeviceIoControl(IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS) failed.\n%s", szVolumeName);
 					}
 					CloseHandle(hVolume);
@@ -218,35 +222,19 @@ int main(int argc, char* argv[]) {
 		Exit(EXIT_REASON_INVALID_ARGUMENT, 3);
 	}
 
-	else if (argc < 3) {
-
-		puts("\n"
-				"if=\"fichier source\".\n"
-				"of=\"fichier de destination\".\n"
-				"bs=n       : Copie par blocs de n octets (1m par défaut)\n"
-				"size=n     : Copie seulement n octets.\n"
-				"data=octet : Remplit le fichier de destination avec la valeur donnée.\n"
-				"delvol     : Supprime les volumes sur le fichier de destination si c'est un disque physique (\\\\.\\PhysicalDrive...). Utilisez ce paramètres si vous appliquez une image plus petite que le disque de destination.\n"
-				"getdisk    : Liste tous les disques trouvés sur cet ordinateur et leur capacité.\n"
-				"getvol     : Liste les volumes et les informations de base.\n"
-				"getvolex   : Pareil que getvol mais affiche plus d'informations.\n"
-				"version    : Affiche la date de build."
-		);
-		
-		Exit(EXIT_REASON_NO_REASON, 0);
-	}
-
 	byte data = 0;
 	byte bIfIsVolume = 0, bOfIsVolume = 0;	// 0 = non, 1 = lettre de volume, 2 = GUID du volume
 	char szInputFile[PATH_BUFFER_SIZE];
 	char szOutputFile[PATH_BUFFER_SIZE];
+	char szUnit[3] = { 0,'b',0 };
 	QWORD qwBufferSize = 1 * 1024 * 1024;
 	QWORD qwWriteSize = 0;
 	QWORD qwIfSp = 0, qwOfSp = 0;	// Pointeurs de fichiers
+	QWORD qwSizeDivisor = 0;
 	
 	bool bIfSet = false, bOfSet = false, bSizeSet = false, bBsSet = false, bDataSet = false, bIfIsPhysicalDrive = false,
 		bOfIsPhysicalDrive = false, bDeleteIf = false, bDeleteOf = false, bSetFileSize = false, bEndFile = false,
-		bDeleteVolumes = false, bSetIfPtr = false, bSetOfPtr = false, bPrealloc = false, bSetOfPtrEnd = false;
+		bDeleteVolumes = false, bSetIfPtr = false, bSetOfPtr = false, bPrealloc = false, bSetOfPtrEnd = false, bUnitSet = false;
 	
 	
 	for (int i = 1; i < argc; i++) {		// Boucle principale pour parser la ligne de commande
@@ -344,6 +332,7 @@ int main(int argc, char* argv[]) {
 			bSetOfPtr = true;
 			continue;
 		}
+
 		if (Equal(szCmdLineTempBuffer, "sp=", 3)) {
 			if (bSetIfPtr && bSetOfPtr)
 				Exit(EXIT_REASON_TOO_MUCH_ARGUMENTS, 20);
@@ -354,6 +343,35 @@ int main(int argc, char* argv[]) {
 			qwOfSp = qwIfSp;
 			bSetIfPtr = true;
 			bSetOfPtr = true;
+			continue;
+		}
+
+		if (Equal(szCmdLineTempBuffer, "unit=", 3)) {
+			if (bUnitSet)
+				Exit(EXIT_REASON_TOO_MUCH_ARGUMENTS, 20);
+
+			if (szCmdLineTempBuffer[6] != 0) {
+				puts("Bad unit.");
+				Exit(EXIT_REASON_INVALID_ARGUMENT, 21);
+			}
+
+
+			const char suffix[] = { 'k', 'm', 'g', 't' };
+			const QWORD qwSuffixSize[] = { 1024, 1048576, 1073741824, 1099511627776 };
+			const char unit = szCmdLineTempBuffer[5];
+			for (byte i = 0; i < sizeof(suffix); i++) {
+				if (unit == suffix[i]) {
+					qwSizeDivisor = qwSuffixSize[i];
+					*szUnit = suffix[i] - 32;
+					break;
+				}
+				else if (i == sizeof suffix - 1) {
+					puts("Bad unit.");
+					Exit(EXIT_REASON_INVALID_ARGUMENT, 22);
+				}
+			}
+
+			bUnitSet = true;
 			continue;
 		}
 
@@ -455,7 +473,7 @@ int main(int argc, char* argv[]) {
 		hSrcFile = CreateFileA(szInputFile, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 		bSrcHandleOpen = true;
 		if (hSrcFile == INVALID_HANDLE_VALUE) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("Error opening source file.\n%s", szInputFile);
 			Exit(EXIT_REASON_NO_REASON, 0);
 		}
@@ -466,8 +484,8 @@ int main(int argc, char* argv[]) {
 			}
 			li.QuadPart = qwIfSp;
 			if (!SetFilePointerEx(hSrcFile, li, 0, FILE_BEGIN)) {
-				GetErrorString(szInputFile);
-				printf("SetFilePointerEx(hSrcFile, %llu).\n%s", li.QuadPart, szInputFile);
+				GetErrorString(szInputFile, sizeof szInputFile);
+				printf("SetFilePointerEx(hSrcFile, %llu) failed.\n%s", li.QuadPart, szInputFile);
 				Exit(EXIT_REASON_NO_REASON, 33);
 			}
 		}
@@ -509,7 +527,7 @@ int main(int argc, char* argv[]) {
 		bOfIsPhysicalDrive = true;
 
 		if (!GetDrive("\\\\.\\C:", &dwSystemDrive)) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("Error detecting system drive.\n%s", szInputFile);
 
 		}
@@ -521,14 +539,14 @@ int main(int argc, char* argv[]) {
 			if (dwOutputFileDriveNumber == dwSystemDrive) {
 			a:
 
-				printf("Le disque sélectionné est le disque système.\nStill continue ? [y/n] ");
+				printf("\nThe selected disk is system drive. Still continue ? [y/n] ");
 				char response;
 				scanf("%c", &response);
 
-				if (response == 'n' || response == 'N') {
+				if (response == 'n' && response == 'N') {
 					Exit(EXIT_REASON_NO_REASON, 0);
 				}
-				else if (response != 'y' || response != 'Y') {
+				else if (response != 'y' && response != 'Y') {
 					goto a;
 				}
 
@@ -548,14 +566,14 @@ int main(int argc, char* argv[]) {
 			CloseHandle(hDestFile);
 			hDestFile = CreateFileA(szOutputFile, GENERIC_WRITE | GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, CREATE_ALWAYS, FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL, NULL);
 			if (hDestFile == INVALID_HANDLE_VALUE) {
-				GetErrorString(szInputFile);
+				GetErrorString(szInputFile, sizeof szInputFile);
 				printf("Error creating output file.\n%s", szInputFile);
 				Exit(EXIT_REASON_NO_REASON, 0);
 
 			}
 		}
 		else if (dwLastError != NO_ERROR) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("Error opening output file.\n%s", szInputFile);
 			Exit(EXIT_REASON_NO_REASON, 0);
 		
@@ -697,7 +715,7 @@ startOperation:
 		}
 		li.QuadPart = qwOfSp;
 		if (!SetFilePointerEx(hDestFile, li, NULL, FILE_BEGIN)) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("[1] SetFilePointerEx(hDestFile, %llu) failed.\n%s", li.QuadPart, szInputFile);
 			Exit(EXIT_REASON_NO_REASON, 0);
 		}
@@ -723,10 +741,14 @@ startOperation:
 		QWORD qwWrites = qwWriteSize < 512 ? 0 : qwWriteSize / qwBufferSize;
 		LPBYTE lpBuffer = (LPBYTE)malloc(qwBufferSize);
 		if (lpBuffer == NULL) {
-			printf("malloc (%llu) failed for r/w buffer.", qwBufferSize);
+			printf("malloc (%llu) failed for r/w buffer.\n", qwBufferSize);
 			Exit(EXIT_REASON_PREVENT_CRASH, 431);
 		}
 
+		if (!bUnitSet) {
+			qwSizeDivisor = (qwWriteSize >= 107374182400) ? 1073741824 : (qwWriteSize >= 104857600) ? 1048576 : 1024;
+			strcpy(szUnit, (qwWriteSize >= 107374182400) ? "Gb" : (qwWriteSize >= 104857600) ? "Mb" : "Kb");
+		}
 		char szPercent[4] = { 0,0,0 };
 		char szTotalSizeString[11], szCurrentSizeString[11];
 		COORD coord = { 0,0 };
@@ -737,16 +759,16 @@ startOperation:
 		byte totalSizeTextLength;
 
 
-		QWORD qwSizeDivisor = (qwWriteSize >= 107374182400) ? 1073741824 : (qwWriteSize >= 104857600) ? 1048576 : 1024;
-
+		
+		
 		_ui64toa(qwWriteSize / qwSizeDivisor, szTotalSizeString, 10);
 		DWORD len = strlen(szTotalSizeString);
 		szTotalSizeString[len] = ' ';
-		strcpy(szTotalSizeString + len + 1, (qwWriteSize >= 107374182400) ? "Gb" : (qwWriteSize >= 104857600) ? "Mb" : "Kb");
+		strcpy(szTotalSizeString + len + 1, szUnit);
 
 		totalSizeTextLength = strlen(szTotalSizeString);
 		ZeroMemory(szCurrentSizeString, totalSizeTextLength);
-		printf("%.*s%s/%s (   %%)\n", totalSizeTextLength - 2, "           ", (qwWriteSize >= 107374182400) ? "Gb" : (qwWriteSize >= 104857600) ? "Mb" : "Kb", szTotalSizeString);
+		printf("%.*s%s/%s (   %%)\n", totalSizeTextLength - 2, "           ", szUnit, szTotalSizeString);
 		coord_percent.X = coord.X + totalSizeTextLength * 2 + 3;
 		coord_percent.Y = coord.Y;
 		
@@ -761,13 +783,13 @@ startOperation:
 
 		if (bDebugMode) {
 			if (bIfSet)
-				printf("CopyLargeFile(%s, %s, %llu, %llu)\n", szInputFile, szOutputFile, qwBufferSize, qwWriteSize);
+				printf("Input filename: %s\nOutput filename: %s\nBuffer size: %llu\nTotal bytes: %llu\n", szInputFile, szOutputFile, qwBufferSize, qwWriteSize);
 			else
-				printf("SeqWrite(%s, %llu, %llu, %d)\n", szOutputFile, qwWriteSize, qwBufferSize, data);
+				printf("Input filename: %s\nOutput filename: %s\nBuffer size: %llu\nbyte: %lu\n", szOutputFile, qwWriteSize, qwBufferSize, data);
 
 		}
 
-		//puts("");
+
 		if (coord.Y >= consoleScreenInfo.dwSize.Y - 1)
 			coord.Y--;
 
@@ -910,7 +932,7 @@ end:
 	if (bEndFile && !bOfIsVolume && !bOfIsPhysicalDrive) {
 		DWORD dwLastError;
 		if (dwLastError = SetFileSize(hDestFile, qwWriteSize + qwOfSp)) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("[3] SetFileSize(hDestFile, %llu) failed.\n%s", qwWriteSize + qwOfSp, szInputFile);
 		}
 	}
@@ -922,7 +944,7 @@ end:
 		}
 		
 		if (!DeleteFileA(szInputFile)) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("Error deleting source file.\n%s", szInputFile);
 		}
 	}
@@ -934,7 +956,7 @@ end:
 		}
 
 		if (!DeleteFileA(szOutputFile)) {
-			GetErrorString(szInputFile);
+			GetErrorString(szInputFile, sizeof szInputFile);
 			printf("Error deleting output file.\n%s", szInputFile);
 		}
 	}
@@ -1038,4 +1060,26 @@ exit:
 	if (dwExitCode) 
 		printf("Stop code: %lu\n", dwExitCode);
 	ExitProcess(dwExitCode);
+}
+
+void PrintHelp(char* lpProgramName) {
+	printf("\n  [Usage]\n"
+		"    if=\"source file\".\n"
+		"    of=\"destination file\".\n\n"
+		"  [Options]\n"
+		"    bs=n          : Copy by blocks of n bytes (1m by default)\n"
+		"    size=n        : Copy only n bytes.\n"
+		"    data=byte     : Fills destination file with byte.\n"
+		"    unit=[k|m|g|t]: Set the display unit to u\n"
+		"    delvol        : Deletes volumes on output file if it's a drive (\\\\.\\PhysicalDrive...). Use this setting if you writing a smaller image than the disk.\n"
+		"    getdisk       : List local drives and their capacity.\n"
+		"    getvol        : List volumes and some informations.\n"
+		"    getvolex      : Same as getvol but display more info.\n"
+		"    version       : Display build date.\n\n"
+		"  [Example]\n"
+		"    %s if=\\\\.\\PhysicalDrive2 of=backup.img bs=4M\n"
+	, lpProgramName
+	);
+
+	
 }

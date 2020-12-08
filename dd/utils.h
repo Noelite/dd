@@ -25,4 +25,4 @@ void ShowLastError(LPCSTR lpCaption);
 DWORD SetFileSize(HANDLE hFile, QWORD qwSize);
 QWORD GetFilePointer(HANDLE hFile);
 
-void GetErrorString(LPSTR lpszError);
+void GetErrorString(LPSTR lpszError, DWORD dwBufferLength);
