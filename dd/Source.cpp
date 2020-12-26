@@ -1,6 +1,6 @@
 #include <Windows.h>
-#include "..\..\..\..\Desktop\Mathis\Code\headers\diskutils.h"
-#include "..\..\..\..\Desktop\Mathis\Code\headers\bases.h"
+#include "diskutils.h"
+#include "bases.h"
 
 #define EXIT_REASON_NO_REASON 0U
 #define EXIT_REASON_INVALID_ARGUMENT 1U
@@ -21,6 +21,11 @@ HANDLE hSrcFile = 0, hDestFile = 0;
 int main(int argc, char* argv[]) {
 	SetConsoleOutputCP(CP_UTF7);
 
+	if (argc == 1) {
+		PrintHelp(argv[0]);
+		Exit(EXIT_REASON_NO_REASON, 0);
+	}
+
 	if (argc == 2) {
 		char szBuffer[10];
 		
@@ -36,6 +41,7 @@ int main(int argc, char* argv[]) {
 		}
 		else if (Equal(szBuffer, "help")) {
 			PrintHelp(argv[0]);
+			Exit(EXIT_REASON_NO_REASON, 0);
 		}
 
 		if (Equal(szBuffer, "getvol", 6)) {
