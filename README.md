@@ -1,4 +1,5 @@
 # dd
 dd command for Windows (unofficial)
 
-i don't care about license. Do whatever you want.
+# I discovered license is important so...
+Use this project under MIT License.
