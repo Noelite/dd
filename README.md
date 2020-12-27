@@ -1,5 +1,5 @@
 # dd
 dd command for Windows (unofficial)
 
-# I discovered license is important so...
+# License
 Use this project under MIT License.
