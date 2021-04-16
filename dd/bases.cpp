@@ -103,7 +103,7 @@ void OctToBin(LPSTR szSrc, LPSTR szDest)
 	char symb = 0;
 	char bits[4] = {0, 0, 0, 0};
 	for (int i = 0; i < nSymboles; i++) {
-		symb = szSrc[i] - '0';	//convertit le symbole en chiffre décimal
+		symb = szSrc[i] - '0';	//convertit le symbole en chiffre dÃ©cimal
 		memset(bits, '0', 3);
 		for (char o = 2; o >= 0; o--) {
 			if (symb == 0) {
